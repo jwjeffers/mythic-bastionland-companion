@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Bastionland Ref" />
+  <title>Mythic Bastionland — Referee Companion</title>
+  <link rel="stylesheet" href="styles.css?v=11" />
+</head>
+<body>
+
+  <!-- Sticky iPad Top Bar -->
+  <header class="session-header">
+    <div class="header-top-row">
+      <div class="brand">
+        <div>
+          <h1>Mythic Bastionland</h1>
+          <div class="brand-sub">Referee Companion</div>
+        </div>
+      </div>
+
+      <!-- Time, Phase, Season, Age Tracker -->
+      <div class="time-tracker">
+        <div class="tracker-group">
+          <span class="tracker-label">Day</span>
+          <button class="btn btn-sm" onclick="adjustDay(-1)">−</button>
+          <strong id="day-display" style="min-width:24px;text-align:center;">1</strong>
+          <button class="btn btn-sm" onclick="adjustDay(1)">+</button>
+        </div>
+
+        <div class="tracker-group">
+          <span class="phase-pill active" data-phase="Morning" onclick="setPhase('Morning')">Morning</span>
+          <span class="phase-pill" data-phase="Afternoon" onclick="setPhase('Afternoon')">Afternoon</span>
+          <span class="phase-pill" data-phase="Night" onclick="setPhase('Night')">Night</span>
+          <button class="btn btn-sm btn-primary" onclick="advancePhase()">Next ➔</button>
+        </div>
+
+        <div class="tracker-group">
+          <select id="season-select" onchange="setSeason(this.value)" aria-label="Season">
+            <option value="Spring">Spring</option>
+            <option value="Harvest">Harvest</option>
+            <option value="Winter">Winter</option>
+          </select>
+          <select id="age-select" onchange="setAge(this.value)" aria-label="Age">
+            <option value="Young">Young</option>
+            <option value="Mature">Mature</option>
+            <option value="Old">Old</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Quick Dice Tray + Save/Load + Theme Toggle -->
+      <div class="dice-bar">
+        <button class="die-btn" onclick="quickRoll(4)">d4</button>
+        <button class="die-btn" onclick="quickRoll(6)">d6</button>
+        <button class="die-btn" onclick="quickRoll(8)">d8</button>
+        <button class="die-btn" onclick="quickRoll(10)">d10</button>
+        <button class="die-btn" onclick="quickRoll(12)">d12</button>
+        <button class="die-btn" onclick="quickRoll(20)">d20</button>
+        <button class="die-btn" onclick="quickRoll6x12()">d6+d12</button>
+        <div id="last-roll-banner" class="last-roll-banner">Ready</div>
+        <span id="autosave-status" style="font-size:0.75rem;color:var(--success);font-weight:600;padding:0 0.2rem;">✓ Auto-saved</span>
+        <button class="btn btn-sm" onclick="exportRealmJSON()" title="Download campaign .json file">💾 Save</button>
+        <label class="btn btn-sm" style="cursor:pointer;" title="Load saved campaign .json file">
+          📂 Load
+          <input type="file" accept=".json" onchange="importRealmJSON(event)" style="display:none;" />
+        </label>
+        <button id="theme-toggle-btn" class="btn btn-sm" onclick="toggleTheme()" title="Toggle Paper / Dark Mode">🌙 Dark</button>
+      </div>
+    </div>
+
+    <!-- Segmented Navigation Bar -->
+    <nav class="nav-tabs">
+      <button class="tab-btn active" data-tab="tab-cheatsheet" onclick="switchTab('tab-cheatsheet')">Rules & Rollers</button>
+      <button class="tab-btn" data-tab="tab-realm" onclick="switchTab('tab-realm')">Realm Map & Myths</button>
+      <button class="tab-btn" data-tab="tab-knights" onclick="switchTab('tab-knights')">Company & Knights</button>
+      <button class="tab-btn" data-tab="tab-myths" onclick="switchTab('tab-myths')">All 72 Myths</button>
+      <button class="tab-btn" data-tab="tab-sparks" onclick="switchTab('tab-sparks')">Spark Tables</button>
+    </nav>
+  </header>
+
+  <main class="main-container">
+
+    <!-- ==========================================
+         TAB 1: REFEREE CHEAT SHEET & LIVE ROLLERS
+         ========================================== -->
+    <section id="tab-cheatsheet" class="tab-pane active">
+      <div class="oath-banner">
+        <span><strong>The Knight's Oath:</strong> Seek the Myths • Honour the Seers • Protect the Realm</span>
+        <span><strong>Primacy of Action:</strong> Player deeds supersede prompts or rules.</span>
+      </div>
+
+      <!-- Quick Referee Rollers Strip -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Quick Procedure Rollers</div>
+          <span class="page-ref">pp. 9, 16, 18, 20–21</span>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:0.5rem;">
+          <button class="btn btn-primary" onclick="rollWildernessCheck()">Wilderness Roll (1d6)</button>
+          <button class="btn" onclick="rollProcedureTable('luck')">Luck Roll (1d6)</button>
+          <button class="btn" onclick="rollProcedureTable('blind')">Travelling Blind (1d6)</button>
+          <button class="btn" onclick="rollProcedureTable('weather')">Dire Weather (1d6)</button>
+          <button class="btn" onclick="rollProcedureTable('mood')">Local Mood (1d6)</button>
+          <button class="btn" onclick="rollProcedureTable('crisis')">Domain Crisis (1d6)</button>
+          <button class="btn" onclick="rollProcedureTable('drama')">Court Drama (1d6)</button>
+          <button class="btn" onclick="rollProcedureTable('collections')">Collections (1d6)</button>
+          <button class="btn" onclick="rollProcedureTable('unresolved')">Unresolved (1d6)</button>
+          <button class="btn btn-danger" onclick="rollScarTable()">Random Scar (1d12)</button>
+        </div>
+        <div id="procedure-roll-output" class="roll-result-box" style="display:none;"></div>
+      </div>
+
+      <div class="grid-2">
+        <!-- Column 1: Core Refereeing & Travel/Exploration -->
+        <div>
+          <!-- Action Procedure & Saves -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">Action Procedure & Saves</div>
+              <span class="page-ref">pp. 8–9, 16</span>
+            </div>
+            <ol style="padding-left:1.25rem;font-size:0.9rem;margin-bottom:0.85rem;">
+              <li><strong>Intent:</strong> What are you trying to do?</li>
+              <li><strong>Leverage:</strong> What makes it possible?</li>
+              <li><strong>Cost:</strong> Uses a Phase, resource, Virtue Loss, or side-effect?</li>
+              <li><strong>Risk:</strong> What's at risk? <em>No risk = no roll.</em> Otherwise roll a <strong>Save</strong> (<code>d20 ≤ Virtue</code>) or <strong>Luck Roll</strong> (<code>1d6</code>).</li>
+              <li><strong>Impact:</strong> Show consequences, honour risk, move forward.</li>
+            </ol>
+            <div class="grid-2" style="gap:0.65rem;grid-template-columns:1fr 1fr;margin-bottom:0.75rem;">
+              <div style="background:var(--success-bg);padding:0.6rem 0.75rem;border-radius:7px;font-size:0.85rem;">
+                <strong style="color:var(--success);">On Success</strong>
+                <ul style="padding-left:1.1rem;margin-top:0.2rem;">
+                  <li><strong>Advance:</strong> Good direction</li>
+                  <li><strong>Disrupt:</strong> Lessen threat</li>
+                  <li><strong>Resolve:</strong> End problem</li>
+                </ul>
+              </div>
+              <div style="background:var(--danger-bg);padding:0.6rem 0.75rem;border-radius:7px;font-size:0.85rem;">
+                <strong style="color:var(--danger);">On Failure</strong>
+                <ul style="padding-left:1.1rem;margin-top:0.2rem;">
+                  <li><strong>Threaten:</strong> New problem</li>
+                  <li><strong>Escalate:</strong> Worse problem</li>
+                  <li><strong>Execute:</strong> Deliver threat</li>
+                </ul>
+              </div>
+            </div>
+            <table class="ref-table">
+              <thead>
+                <tr><th>Virtue (d20 ≤ Virtue)</th><th>At 0</th><th>Restored By (Takes 1 Phase)</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><strong>Vigour (VIG)</strong> — Body</td><td><strong>Slain</strong></td><td><strong>Sustenance</strong> or hospitality</td></tr>
+                <tr><td><strong>Clarity (CLA)</strong> — Senses</td><td><strong>Exposed</strong> (No GD/Armour)</td><td><strong>Stimulant</strong> or Seer guidance</td></tr>
+                <tr><td><strong>Spirit (SPI)</strong> — Will</td><td><strong>Broken</strong> (Impaired d4)</td><td><strong>Sacrament</strong>, Monument, or <strong>Passion</strong></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Travel, Phases & Exploration -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">Travel, Phases & Folklore</div>
+              <span class="page-ref">pp. 17–19</span>
+            </div>
+            <table class="ref-table">
+              <thead>
+                <tr><th>Action (1 Phase)</th><th>Distance</th><th>Cost / Notes</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><strong>Trek</strong></td><td>1 Hex</td><td>On foot or steed</td></tr>
+                <tr><td><strong>Gallop</strong></td><td>2 Hexes</td><td>Non-Exhausted steed (<strong>steed loses d6 VIG</strong>)</td></tr>
+                <tr><td><strong>Cruise</strong></td><td>3 Hexes</td><td>By boat or steed on rare paved road</td></tr>
+                <tr><td><strong>Sweep / Vantage</strong></td><td>Current Hex</td><td>Overview of Hex + sense of adjacent Hexes</td></tr>
+              </tbody>
+            </table>
+
+            <div class="grid-2" style="grid-template-columns:1fr 1fr;gap:0.75rem;margin-top:0.8rem;">
+              <div>
+                <h4 style="font-size:0.78rem;text-transform:uppercase;color:var(--text-muted);">Wilderness Roll (1d6)</h4>
+                <table class="ref-table">
+                  <tbody>
+                    <tr><td><span class="roll-badge">1</span></td><td>Next Omen: <strong>Random Myth</strong></td></tr>
+                    <tr><td><span class="roll-badge">2–3</span></td><td>Next Omen: <strong>Nearest Myth</strong></td></tr>
+                    <tr><td><span class="roll-badge">4–6</span></td><td>Encounter Hex <strong>Landmark</strong></td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div style="font-size:0.84rem;">
+                <h4 style="font-size:0.78rem;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.35rem;">Road Penalties</h4>
+                <ul style="padding-left:1.1rem;">
+                  <li><strong>Night Travel:</strong> <code>-d6 SPI</code> (+ Blind if no light & guide)</li>
+                  <li><strong>No Sleep:</strong> <code>-d6 CLA</code> next morning</li>
+                  <li><strong>No Supplies:</strong> <code>-d6 VIG</code> each morning</li>
+                  <li><strong>Winter Night/Camp:</strong> <code>-d6 VIG</code> + Dire Weather</li>
+                  <li><strong>Myth Hex:</strong> Auto-triggers next Omen!</li>
+                </ul>
+              </div>
+            </div>
+
+            <div style="margin-top:0.8rem;background:var(--bg-subtle);padding:0.65rem 0.8rem;border-radius:7px;font-size:0.84rem;">
+              <strong>Who Knows What? (Folklore — p. 19)</strong>
+              <ul style="padding-left:1.1rem;margin-top:0.25rem;">
+                <li><strong>Vassals:</strong> Nearest Myth rumour & direction (exact hex if adjacent) + adjacent Landmarks.</li>
+                <li><strong>Knights & Vagabonds:</strong> Random Myth rumour & direction + nearest Landmark.</li>
+                <li><strong>Seers:</strong> Secret rules, weaknesses, cures & exact hexes of <strong>all Myths & Landmarks</strong>.</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <!-- Column 2: Combat Calculator, Feats, Gambits, Wounds & Scars -->
+        <div>
+          <!-- Interactive Combat Attack & Gambit Roller -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">Combat Attack & Gambit Roller</div>
+              <span class="page-ref">pp. 8–10</span>
+            </div>
+            <p style="font-size:0.84rem;color:var(--text-secondary);margin-bottom:0.6rem;">
+              Attacks always hit. Roll all Attack Dice together. Tap any <code>4+</code> die to discard for a <strong>Gambit</strong> (<code>8+</code> = <strong>Strong Gambit</strong>). Highest remaining die minus Armour = <strong>Damage</strong>.
+            </p>
+            <div style="display:flex;flex-wrap:wrap;gap:0.4rem;align-items:center;margin-bottom:0.6rem;">
+              <button class="btn btn-sm" onclick="addCombatDie(4)">+d4</button>
+              <button class="btn btn-sm" onclick="addCombatDie(6)">+d6</button>
+              <button class="btn btn-sm" onclick="addCombatDie(8)">+d8</button>
+              <button class="btn btn-sm" onclick="addCombatDie(10)">+d10</button>
+              <button class="btn btn-sm" onclick="addCombatDie(12)">+d12</button>
+              <label style="font-size:0.84rem;margin-left:auto;display:flex;align-items:center;gap:0.35rem;">
+                Armour:
+                <select id="combat-target-armour" onchange="recalcCombatPool()">
+                  <option value="0">A0</option>
+                  <option value="1">A1</option>
+                  <option value="2">A2</option>
+                  <option value="3">A3</option>
+                  <option value="4">A4</option>
+                </select>
+              </label>
+            </div>
+            <div style="display:flex;gap:0.45rem;align-items:center;">
+              <div id="combat-pool-summary" style="font-family:var(--font-mono);font-size:0.88rem;font-weight:600;flex:1;">
+                Pool: 2d8
+              </div>
+              <button class="btn btn-sm btn-primary" onclick="rollCombatPool()">Roll Pool</button>
+              <button class="btn btn-sm" onclick="clearCombatPool()">Clear</button>
+            </div>
+            <div id="combat-rolled-tray" class="dice-pool-tray"></div>
+            <div id="combat-damage-summary"></div>
+          </div>
+
+          <!-- Feats, Gambits & Wounds -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">Feats, Gambits, Wounds & Scars</div>
+              <span class="page-ref">pp. 9–10</span>
+            </div>
+            <div class="grid-3" style="grid-template-columns:repeat(3,1fr);gap:0.5rem;margin-bottom:0.8rem;">
+              <div style="background:var(--bg-subtle);padding:0.55rem;border-radius:7px;font-size:0.82rem;">
+                <strong>Smite (VIG Save)</strong><br/>
+                Before melee roll: <strong>+d12</strong> or <strong>Blast</strong>. Fail = Fatigued.
+              </div>
+              <div style="background:var(--bg-subtle);padding:0.55rem;border-radius:7px;font-size:0.82rem;">
+                <strong>Focus (CLA Save)</strong><br/>
+                After roll: <strong>1 free Gambit</strong> (keep die). Fail = Fatigued.
+              </div>
+              <div style="background:var(--bg-subtle);padding:0.55rem;border-radius:7px;font-size:0.82rem;">
+                <strong>Deny (SPI Save)</strong><br/>
+                Enemy discards <strong>1 Attack die</strong>. Fail = Fatigued.
+              </div>
+            </div>
+
+            <div class="grid-2" style="grid-template-columns:1fr 1fr;gap:0.75rem;font-size:0.84rem;">
+              <div>
+                <strong>Gambits (Discard 4+ Die)</strong>
+                <p style="color:var(--text-muted);font-size:0.78rem;margin:0.15rem 0 0.3rem;">Foe gets VIG Save (except Bolster/Move). <strong>8+ melee = Strong</strong> (No Save OR disarm / break shield / remove helm).</p>
+                <ul style="padding-left:1.1rem;">
+                  <li><strong>Bolster:</strong> +1 Damage (no Save)</li>
+                  <li><strong>Move:</strong> Move after Attack (no Save)</li>
+                  <li><strong>Repel:</strong> Push foe away</li>
+                  <li><strong>Stop:</strong> Foe can't move next turn</li>
+                  <li><strong>Impair:</strong> Foe weapon d4 next turn</li>
+                  <li><strong>Trap:</strong> Trap shield until next turn</li>
+                  <li><strong>Dismount:</strong> Unhorse (+d6 Damage)</li>
+                </ul>
+              </div>
+              <div>
+                <strong>Damage, Scars & Wounds</strong>
+                <ul style="padding-left:1.1rem;margin-top:0.2rem;">
+                  <li>Subtract from <strong>Guard (GD)</strong> first.</li>
+                  <li><strong>Exact 0 GD:</strong> Roll the attacking die on the <strong>Scar Table</strong>.</li>
+                  <li><strong>VIG Damage = Wound!</strong> Pass <strong>VIG Save</strong>:
+                    <ul style="padding-left:0.95rem;">
+                      <li><strong>Pass:</strong> Fight on (if ≥ ½ VIG lost → <em>Exhausted</em>, d4 attacks).</li>
+                      <li><strong>Fail = Mortal Wound:</strong> Helpless, dies in 1 hr unless tended.</li>
+                      <li><strong>0 VIG = Slain!</strong></li>
+                    </ul>
+                  </li>
+                </ul>
+              </div>
+            </div>
+
+            <details style="margin-top:0.8rem;">
+              <summary style="cursor:pointer;font-weight:600;font-size:0.86rem;">
+                View Scar Table (1–12 — p. 9)
+              </summary>
+              <table class="ref-table" style="font-size:0.8rem;margin-top:0.4rem;">
+                <thead>
+                  <tr><th>Die</th><th>Scar</th><th>Effect & Max Guard Growth</th></tr>
+                </thead>
+                <tbody>
+                  <tr><td><span class="roll-badge">1</span></td><td><strong>Distress</strong></td><td>Lose <code>d6 SPI</code>.</td></tr>
+                  <tr><td><span class="roll-badge">2</span></td><td><strong>Disfigurement</strong></td><td>Mark (1:Eye, 2:Cheek, 3:Neck, 4:Torso, 5:Nose, 6:Jaw). If max GD ≤ 2, <code>+d6 max GD</code>.</td></tr>
+                  <tr><td><span class="roll-badge">3</span></td><td><strong>Smash</strong></td><td>Lose <code>d6 VIG</code>.</td></tr>
+                  <tr><td><span class="roll-badge">4</span></td><td><strong>Stun</strong></td><td>Lose <code>d6 CLA</code>. If max GD ≤ 4, <code>+d6 max GD</code>.</td></tr>
+                  <tr><td><span class="roll-badge">5</span></td><td><strong>Rupture</strong></td><td>Lose <code>2d6 VIG</code>.</td></tr>
+                  <tr><td><span class="roll-badge">6</span></td><td><strong>Gouge</strong></td><td>When stitched up, if max GD ≤ 6, <code>+d6 max GD</code>.</td></tr>
+                  <tr><td><span class="roll-badge">7</span></td><td><strong>Concussion</strong></td><td>Lose <code>2d6 CLA</code>.</td></tr>
+                  <tr><td><span class="roll-badge">8</span></td><td><strong>Tear</strong></td><td>Lost (1:Nose, 2:Ear, 3:Finger, 4:Thumb, 5:Eye, 6:Scalp). If max GD ≤ 8, <code>+d6 max GD</code>.</td></tr>
+                  <tr><td><span class="roll-badge">9</span></td><td><strong>Agony</strong></td><td>Lose <code>2d6 SPI</code>.</td></tr>
+                  <tr><td><span class="roll-badge">10</span></td><td><strong>Mutilation</strong></td><td>Limb (1-2:Leg, 3-4:Shield Arm, 5-6:Sword Arm). Next Season if max GD ≤ 10, <code>+d6 max GD</code>.</td></tr>
+                  <tr><td><span class="roll-badge">11</span></td><td><strong>Doom</strong></td><td>Next Mortal Wound this Season = <strong>Slain</strong>.</td></tr>
+                  <tr><td><span class="roll-badge">12</span></td><td><strong>Humiliation</strong></td><td>On revenge, if max GD ≤ 12, <code>+d6 max GD</code>.</td></tr>
+                </tbody>
+              </table>
+            </details>
+          </div>
+        </div>
+      </div>
+
+      <!-- Second Row: Equipment & Domain Reference -->
+      <div class="grid-2">
+        <details class="card" open>
+          <summary style="cursor:pointer;font-weight:700;font-size:0.96rem;">Arms, Armour, Beasts, Services & Warbands (pp. 11–13)</summary>
+          <div style="margin-top:0.75rem;font-size:0.84rem;">
+            <table class="ref-table">
+              <thead>
+                <tr><th>Tier</th><th>Weapons</th><th>Armour</th><th>Beasts & Services</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>Common</strong></td>
+                  <td>Hand (d6), Spear/Mace/Axe (d8 hefty), Billhook/Poleaxe (d10 long), Shortbow (d6 long), Javelin (d6)</td>
+                  <td>Shield (d4, A1)</td>
+                  <td>Hound (4GD, d6), Pony (2GD), Mule (1GD) • Servant (2GD), Guide (4GD), Sentry (3GD)</td>
+                </tr>
+                <tr>
+                  <td><strong>Uncommon</strong></td>
+                  <td>Shortsword (2d6), Lance (d10), Greataxe/Maul (2d10 slow), Longbow (d8 slow)</td>
+                  <td>Coat (A1), Helm (A1)</td>
+                  <td>Riding Steed (3GD), Heavy Steed (2GD), Hawk (4GD) • Herbalist, Soldier (6GD, A2), Remedies</td>
+                </tr>
+                <tr>
+                  <td><strong>Rare</strong></td>
+                  <td>Longsword (2d8 hefty), Greatsword (2d10 long), Curvebow (2d6 long), Crossbow (2d8 slow)</td>
+                  <td>Plates (A1)</td>
+                  <td>Charger (5GD, d8 trample) • Sage, Alchemist, Sellsword (7GD, A4, 2d8)</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </details>
+
+        <details class="card" open>
+          <summary style="cursor:pointer;font-weight:700;font-size:0.96rem;">Glory, Ranks, Seasons & Domain Rulership (pp. 6, 17, 20–21)</summary>
+          <div style="margin-top:0.75rem;font-size:0.84rem;">
+            <p><strong>Ranks:</strong> <code>0</code> Errant (Lead Warband) • <code>3</code> Gallant (Council) • <code>6</code> Tenant (Rule Holding) • <code>9</code> Dominant (Seat of Power) • <code>12</code> Radiant (City Quest).</p>
+            <p style="margin-top:0.4rem;"><strong>Between Seasons:</strong> Heal Virtues + choose <em>Pilgrimage</em>, <em>Courtesy</em>, or <em>Service</em>.</p>
+            <p style="margin-top:0.4rem;"><strong>Between Ages:</strong> Heal Virtues, +1 Glory, reroll Virtues on <code>d12+d6</code> (keep higher if Mature, lower if Old; Old loses <code>d12 VIG</code>) + choose <em>Duty</em>, <em>Succession</em>, or <em>Legacy</em>.</p>
+            <p style="margin-top:0.4rem;"><strong>Domain Crises (3+ at end of Season = Misrule):</strong> 1. Chaos, 2. Debt, 3. Famine, 4. Misery, 5. Panic, 6. Doubt.</p>
+          </div>
+        </details>
+      </div>
+    </section>
+
+    <!-- ==========================================
+         TAB 2: REALM HEX MAP & ACTIVE MYTHS
+         ========================================== -->
+    <section id="tab-realm" class="tab-pane">
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Realm Hex Map & Active Myths (12×12 Blank Realm Sheet)</div>
+            <div style="font-size:0.78rem;color:var(--text-muted);">
+              Official <em>Mythic Bastionland Blank Realm.pdf</em> grid &amp; hand-drawn ink stamps • Scroll wheel / pinch to Zoom • Drag to Pan • Tap Hex to Select
+            </div>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:0.45rem;align-items:center;">
+            <div class="touch-mode-switch" role="group" aria-label="Hex Tap Mode">
+              <button id="touch-mode-inspect" class="touch-mode-btn active" onclick="setMapTouchMode('inspect')">🔍 Tap: Inspect</button>
+              <button id="touch-mode-move" class="touch-mode-btn" onclick="setMapTouchMode('move')">🛡️ Tap: Move Company</button>
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="printPlayerRealmPDF()" title="Print or Save Player-Safe Realm Map to PDF">🖨️ Print Player Map (PDF)</button>
+            <button class="btn btn-danger btn-sm" onclick="openNewRealmModal()">⚠️ New Realm...</button>
+            <button id="toggle-player-view-btn" class="btn btn-sm" onclick="togglePlayerView()">Referee View</button>
+          </div>
+        </div>
+
+        <div class="realm-workspace">
+          <!-- Left: 12x12 2D Blank Realm Sheet Interactive Hex Map -->
+          <div>
+            <div class="hex-map-wrapper">
+              <div class="map-camera-controls">
+                <div style="display:flex;gap:0.35rem;align-items:center;flex-wrap:wrap;">
+                  <button class="btn btn-sm" onclick="zoom2DMap(0.25)">＋ Zoom In</button>
+                  <button class="btn btn-sm" onclick="zoom2DMap(-0.25)">－ Zoom Out</button>
+                  <button class="btn btn-sm" onclick="reset2DMapZoom()">Reset View</button>
+                  <span id="map-zoom-label" style="font-size:0.78rem;color:var(--text-muted);font-family:var(--font-mono);margin-left:0.25rem;">100%</span>
+                </div>
+                <div style="font-size:0.76rem;color:var(--text-muted);">
+                  Scroll wheel to zoom • Drag when zoomed to pan
+                </div>
+              </div>
+              <div id="realm-2d-viewport" class="realm-2d-viewport">
+                <div id="realm-2d-stage" class="realm-2d-stage">
+                  <svg id="hex-map-svg" viewBox="10 10 438 492" xmlns="http://www.w3.org/2000/svg"></svg>
+                </div>
+              </div>
+            </div>
+
+            <!-- Official Blank Realm Stamp Legend -->
+            <div class="stamp-legend-box">
+              <div class="stamp-legend-row">
+                <span class="stamp-legend-heading">Red-Ink Landmarks:</span>
+                <span class="stamp-chip"><img src="stamps/landmark_Dwelling.png" alt="Dwelling" /> Dwelling</span>
+                <span class="stamp-chip"><img src="stamps/landmark_Sanctum.png" alt="Sanctum" /> Sanctum (Seer)</span>
+                <span class="stamp-chip"><img src="stamps/landmark_Monument.png" alt="Monument" /> Monument (+SPI)</span>
+                <span class="stamp-chip"><img src="stamps/landmark_Hazard.png" alt="Hazard" /> Hazard (-d6 VIG)</span>
+                <span class="stamp-chip"><img src="stamps/landmark_Curse.png" alt="Curse" /> Curse (Blind)</span>
+                <span class="stamp-chip"><img src="stamps/landmark_Ruin.png" alt="Ruin" /> Ruin</span>
+              </div>
+              <div class="stamp-legend-row" style="margin-top:0.35rem;">
+                <span class="stamp-legend-heading">Holdings &amp; Marks:</span>
+                <span class="stamp-chip"><img src="stamps/holding_Castle.png" alt="Castle" /> Castle / Seat</span>
+                <span class="stamp-chip"><img src="stamps/holding_Fortress.png" alt="Fortress" /> Fortress</span>
+                <span class="stamp-chip"><img src="stamps/holding_Town.png" alt="Town" /> Town</span>
+                <span class="stamp-chip"><img src="stamps/holding_Tower.png" alt="Tower" /> Tower</span>
+                <span class="stamp-chip"><strong style="color:#dc2626;font-family:Georgia,serif;">①–⑥</strong> Myth Hex</span>
+                <span class="stamp-chip"><span style="display:inline-block;width:14px;height:3px;background:#dc2626;border-radius:2px;"></span> Barrier Edge</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right: Selected Hex Inspector & Active 6 Myths -->
+          <div>
+            <div class="card" style="background:var(--bg-subtle);margin-bottom:0.9rem;">
+              <div class="card-header">
+                <div class="card-title" id="selected-hex-title">Selected Hex: 04.04</div>
+                <div style="display:flex;gap:0.4rem;">
+                  <button class="btn btn-sm btn-primary" onclick="moveCompanyToSelected()">🛡️ Move Company Here</button>
+                  <button class="btn btn-sm" onclick="rollWildernessForSelected()">Wilderness Roll</button>
+                </div>
+              </div>
+              <div class="grid-2" style="grid-template-columns:1fr 1fr;gap:0.55rem;font-size:0.85rem;">
+                <div>
+                  <label>Terrain (1–12 Blank Realm)</label>
+                  <select id="hex-terrain-edit" onchange="updateSelectedHex()" style="width:100%;margin-top:0.2rem;">
+                    <option value="Marsh">1. Marsh</option>
+                    <option value="Heath">2. Heath</option>
+                    <option value="Crag">3. Crag</option>
+                    <option value="Peaks">4. Peaks</option>
+                    <option value="Forest">5. Forest</option>
+                    <option value="Valley">6. Valley</option>
+                    <option value="Hills">7. Hills</option>
+                    <option value="Meadow">8. Meadow</option>
+                    <option value="Bog">9. Bog</option>
+                    <option value="Lake">10. Lake</option>
+                    <option value="Glade">11. Glade</option>
+                    <option value="Plains">12. Plains</option>
+                  </select>
+                </div>
+                <div>
+                  <label>Holding</label>
+                  <select id="hex-holding-edit" onchange="updateSelectedHex()" style="width:100%;margin-top:0.2rem;">
+                    <option value="">None</option>
+                    <option value="Seat of Power">👑 Seat of Power (Castle)</option>
+                    <option value="Castle">🏰 Castle</option>
+                    <option value="Fortress">🛡️ Fortress</option>
+                    <option value="Town">🏘️ Walled Town</option>
+                    <option value="Tower">🗼 Watchtower</option>
+                  </select>
+                </div>
+                <div>
+                  <label>Landmark</label>
+                  <select id="hex-landmark-edit" onchange="updateSelectedHex()" style="width:100%;margin-top:0.2rem;">
+                    <option value="">None</option>
+                    <option value="Sanctum">Sanctum (Seer)</option>
+                    <option value="Dwelling">Dwelling</option>
+                    <option value="Monument">Monument (+SPI)</option>
+                    <option value="Hazard">Hazard (-d6 VIG)</option>
+                    <option value="Curse">Curse (Blind)</option>
+                    <option value="Ruin">Ruin</option>
+                  </select>
+                </div>
+                <div>
+                  <label>Myth Hex (1–6)</label>
+                  <select id="hex-myth-edit" onchange="updateSelectedHex()" style="width:100%;margin-top:0.2rem;">
+                    <option value="">None</option>
+                    <option value="1">Myth #1</option>
+                    <option value="2">Myth #2</option>
+                    <option value="3">Myth #3</option>
+                    <option value="4">Myth #4</option>
+                    <option value="5">Myth #5</option>
+                    <option value="6">Myth #6</option>
+                  </select>
+                </div>
+              </div>
+              <div style="margin-top:0.55rem;font-size:0.85rem;">
+                <label>Name / Seer / Notes</label>
+                <input type="text" id="hex-label-edit" oninput="updateSelectedHex()" placeholder="Holding name, Seer, notes..." style="width:100%;margin-top:0.2rem;" />
+              </div>
+              <div style="margin-top:0.55rem;display:flex;align-items:center;flex-wrap:wrap;gap:0.85rem;font-size:0.85rem;">
+                <label style="display:flex;align-items:center;gap:0.35rem;cursor:pointer;"><input type="checkbox" id="hex-river-edit" onchange="updateSelectedHex()" style="width:18px;height:18px;" /> River</label>
+                <label style="display:flex;align-items:center;gap:0.35rem;cursor:pointer;"><input type="checkbox" id="hex-barrier-edit" onchange="toggleSelectedHexBarrier()" style="width:18px;height:18px;" /> Barrier</label>
+                <div id="barrier-sides-editor" style="display:none;align-items:center;gap:0.25rem;flex-wrap:wrap;"></div>
+              </div>
+              <div id="selected-hex-folklore" style="margin-top:0.55rem;font-size:0.84rem;color:var(--text-secondary);"></div>
+            </div>
+
+            <!-- Active 6 Myths Tracker -->
+            <div>
+              <h3 style="font-size:0.95rem;margin-bottom:0.6rem;">Active Realm Myths (1–6)</h3>
+              <div id="active-myths-container"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==========================================
+         TAB 3: COMPANY ROSTER & ALL 72 KNIGHTS
+         ========================================== -->
+    <section id="tab-knights" class="tab-pane">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Company Roster (Editable Stats + Knight PDF Page)</div>
+          <div style="display:flex;gap:0.45rem;align-items:center;flex-wrap:wrap;">
+            <select id="new-knight-start">
+              <option value="Wanderer">Wanderer (d12+d6, d6 GD)</option>
+              <option value="Courtier">Courtier (d12+6, 2d6 GD)</option>
+              <option value="Ruler">Ruler (d12+6, d6+6 GD)</option>
+            </select>
+            <button class="btn btn-primary btn-sm" onclick="rollNewPlayerKnight()">+ Roll Knight</button>
+            <button class="btn btn-sm" onclick="restAllCompany()">Rest (Restore GD)</button>
+          </div>
+        </div>
+        <div id="company-roster-grid" class="grid-3"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">All 72 Knights & Seers — Tap Any Page for Full Screen</div>
+          <div style="display:flex;gap:0.45rem;flex-wrap:wrap;">
+            <input type="text" id="knight-search-input" oninput="renderKnightsCompendium()" placeholder="Search Knight, Seer, weapon, ability..." style="min-width:240px;" />
+            <button class="btn btn-primary btn-sm" onclick="rollRandomKnightLookup()">Roll d6+d12</button>
+            <button class="btn btn-sm" onclick="document.getElementById('knight-search-input').value='';renderKnightsCompendium();">Show All 72</button>
+          </div>
+        </div>
+        <div id="knights-compendium-grid" class="grid-3"></div>
+      </div>
+    </section>
+
+    <!-- ==========================================
+         TAB 4: ALL 72 MYTHS & THE CITY QUEST
+         ========================================== -->
+    <section id="tab-myths" class="tab-pane">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">The City Quest (12+ Glory — Pages 172–173)</div>
+          <div style="display:flex;gap:0.45rem;align-items:center;flex-wrap:wrap;">
+            <span style="font-size:0.85rem;">Omens Seen:</span>
+            <input type="number" id="city-omens-seen" value="0" min="0" max="24" style="width:64px;" />
+            <button class="btn btn-primary btn-sm" onclick="rollCityQuestOmen()">Roll City Omen</button>
+            <button class="btn btn-sm" onclick="openPdfModal(172, 'The City Quest — Omens')">📄 Page 172</button>
+            <button class="btn btn-sm" onclick="openPdfModal(173, 'The City Quest — Cast')">📄 Page 173</button>
+          </div>
+        </div>
+        <p style="font-size:0.85rem;color:var(--text-secondary);" id="city-quest-rules"></p>
+        <div id="city-quest-roll-box" class="roll-result-box" style="display:none;"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">All 72 Myths — Tap Any Page for Full Screen</div>
+          <div style="display:flex;gap:0.45rem;flex-wrap:wrap;">
+            <input type="text" id="myth-search-input" oninput="renderMythsCompendium()" placeholder="Search Myth, Omen, Cast..." style="min-width:240px;" />
+            <button class="btn btn-primary btn-sm" onclick="rollRandomMythLookup()">Roll d6+d12</button>
+            <button class="btn btn-sm" onclick="document.getElementById('myth-search-input').value='';renderMythsCompendium();">Show All 72</button>
+          </div>
+        </div>
+        <div id="myths-compendium-grid" class="grid-3"></div>
+      </div>
+    </section>
+
+    <!-- ==========================================
+         TAB 5: SPARK TABLES (2d12) & SITE BUILDER
+         ========================================== -->
+    <section id="tab-sparks" class="tab-pane">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">1-Tap Spark Generators (pp. 22–25)</div>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:0.5rem;">
+          <button class="btn btn-primary" onclick="rollSparkCombo('npc')">Instant NPC</button>
+          <button class="btn btn-primary" onclick="rollSparkCombo('holding')">Instant Holding</button>
+          <button class="btn btn-primary" onclick="rollSparkCombo('hex')">Wilderness Hex</button>
+          <button class="btn btn-primary" onclick="rollSparkCombo('battle')">Battle / Duel</button>
+        </div>
+        <div id="spark-combo-output" class="roll-result-box" style="display:none;"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">6-Point Hex Site Generator (p. 15)</div>
+          <button class="btn btn-primary btn-sm" onclick="generatePointcrawlSite()">Roll New Site</button>
+        </div>
+        <div id="pointcrawl-container" class="grid-2" style="align-items:center;"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">All 36 Spark Tables (2d12)</div>
+          <div style="display:flex;gap:0.35rem;flex-wrap:wrap;">
+            <button class="btn btn-sm" onclick="filterSparkCategory('All')">All</button>
+            <button class="btn btn-sm" onclick="filterSparkCategory('Nature')">Nature</button>
+            <button class="btn btn-sm" onclick="filterSparkCategory('Civilisation')">Civilisation</button>
+            <button class="btn btn-sm" onclick="filterSparkCategory('People')">People</button>
+            <button class="btn btn-sm" onclick="filterSparkCategory('Combat')">Combat</button>
+          </div>
+        </div>
+        <div id="spark-tables-grid" class="grid-3"></div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ==========================================
+       FULL-SCREEN PDF PAGE LIGHTBOX MODAL
+       ========================================== -->
+  <div id="pdf-page-modal" class="page-modal-backdrop" onclick="closePdfModal(event)">
+    <div class="page-modal-topbar" onclick="event.stopPropagation()">
+      <div style="display:flex;align-items:center;gap:0.5rem;">
+        <button class="btn btn-sm" onclick="stepPdfModal(-1)" title="Previous Page">◀ Prev</button>
+        <button class="btn btn-sm" onclick="stepPdfModal(1)" title="Next Page">Next ▶</button>
+        <strong id="pdf-modal-title" style="font-size:0.95rem;margin-left:0.25rem;">Page 28</strong>
+      </div>
+      <div style="display:flex;align-items:center;gap:0.5rem;">
+        <button class="btn btn-sm btn-danger" onclick="closePdfModal()">✕ Close</button>
+      </div>
+    </div>
+    <div class="page-modal-body" onclick="closePdfModal(event)">
+      <img id="pdf-modal-img" class="page-modal-img" src="" alt="Rulebook Page" onclick="event.stopPropagation()" />
+    </div>
+  </div>
+
+  <!-- ==========================================
+       NEW REALM CONFIRMATION WARNING MODAL
+       ========================================== -->
+  <div id="new-realm-modal" class="page-modal-backdrop" onclick="closeNewRealmModal(event)">
+    <div class="card" style="max-width:460px;width:100%;margin:auto;" onclick="event.stopPropagation()">
+      <div class="card-header">
+        <div class="card-title" style="color:var(--danger);">⚠️ Generate a New Realm?</div>
+        <button class="btn btn-sm" onclick="closeNewRealmModal()">✕</button>
+      </div>
+      <p style="font-size:0.9rem;color:var(--text-secondary);margin-bottom:1rem;">
+        Generating a new Realm will <strong>overwrite your current 12×12 Hex Map, Holdings, Landmarks, and reset your 6 Active Myths</strong>.
+      </p>
+      <div style="display:flex;flex-wrap:wrap;gap:0.5rem;justify-content:flex-end;">
+        <button class="btn btn-sm" onclick="closeNewRealmModal()">Cancel</button>
+        <button class="btn btn-sm" onclick="exportRealmJSON()">💾 Backup Current Realm First</button>
+        <button class="btn btn-sm btn-danger" onclick="confirmGenerateNewRealm()">⚠️ Yes, Generate New Realm</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==========================================
+       PRINTABLE PLAYER REALM SHEET (FOR PRINT TO PDF)
+       ========================================== -->
+  <div id="printable-player-sheet" class="printable-player-sheet" aria-hidden="true"></div>
+
+  <script src="data.js?v=12"></script>
+  <script src="app.js?v=12"></script>
+</body>
+</html>

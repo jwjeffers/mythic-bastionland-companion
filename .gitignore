@@ -1,0 +1,7 @@
+# Exclude raw PDFs and unused 3D/parchment assets from GitHub Pages repo
+*.pdf
+pages/
+three.min.js
+map3d.js
+__pycache__/
+*.pyc
