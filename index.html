@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="Bastionland Ref" />
   <title>Mythic Bastionland — Referee Companion</title>
-  <link rel="stylesheet" href="styles.css?v=11" />
+  <link rel="stylesheet" href="styles.css?v=13" />
 </head>
 <body>
 
@@ -620,13 +620,14 @@
 
       <div class="card">
         <div class="card-header">
-          <div class="card-title">All 36 Spark Tables (2d12)</div>
+          <div class="card-title">Spark Tables (2d12 &amp; Knight d6+d12)</div>
           <div style="display:flex;gap:0.35rem;flex-wrap:wrap;">
             <button class="btn btn-sm" onclick="filterSparkCategory('All')">All</button>
             <button class="btn btn-sm" onclick="filterSparkCategory('Nature')">Nature</button>
             <button class="btn btn-sm" onclick="filterSparkCategory('Civilisation')">Civilisation</button>
             <button class="btn btn-sm" onclick="filterSparkCategory('People')">People</button>
             <button class="btn btn-sm" onclick="filterSparkCategory('Combat')">Combat</button>
+            <button class="btn btn-sm" onclick="filterSparkCategory('Knight')">Knight</button>
           </div>
         </div>
         <div id="spark-tables-grid" class="grid-3"></div>
@@ -679,7 +680,7 @@
        ========================================== -->
   <div id="printable-player-sheet" class="printable-player-sheet" aria-hidden="true"></div>
 
-  <script src="data.js?v=12"></script>
-  <script src="app.js?v=12"></script>
+  <script src="data.js?v=13"></script>
+  <script src="app.js?v=13"></script>
 </body>
 </html>

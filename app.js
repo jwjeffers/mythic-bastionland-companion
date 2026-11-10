@@ -1524,8 +1524,25 @@ function importRealmJSON(event) {
 // ==========================================
 // TAB 3: COMPANY ROSTER & 72 KNIGHTS/SEERS
 // ==========================================
+const KNIGHT_PROMPT_KEYS = ["Person", "Name", "Characteristic", "Object", "Beast", "State", "Theme"];
+
+// Roll an independent d6 + d12 (1-1 to 6-12) to select one of the 7 footer prompts from the 72 Knight pages
+function rollKnightPromptSingle(promptKey) {
+  const d6 = rollDie(6);
+  const d12 = rollDie(12);
+  const id = `${d6}-${d12}`;
+  const k = getKnightById(id) || window.MB_DATA.knights[Math.floor(Math.random() * 72)];
+  const val = (k && k.prompts && k.prompts[promptKey]) ? k.prompts[promptKey] : promptKey;
+  return { d6, d12, id: k ? k.id : id, page: k ? k.page : 28, val };
+}
+
 function createKnightEntry(startMode, forcedKnightObj) {
-  const kObj = forcedKnightObj || window.MB_DATA.knights[Math.floor(Math.random() * 72)];
+  // Roll d6+d12 for the Knight archetype (unless a specific Knight was clicked)
+  const kRollId = `${rollDie(6)}-${rollDie(12)}`;
+  const kObj = forcedKnightObj || getKnightById(kRollId) || window.MB_DATA.knights[Math.floor(Math.random() * 72)];
+  // Roll an independent d6+d12 across the 72 Knight pages to choose the Knight's Name
+  const nameRoll = rollKnightPromptSingle("Name");
+
   let vig, cla, spi, gd, glory = 0;
   if (startMode === "Courtier") {
     vig = rollDie(12) + 6;
@@ -1549,7 +1566,8 @@ function createKnightEntry(startMode, forcedKnightObj) {
 
   return {
     uid: Date.now() + Math.floor(Math.random() * 10000),
-    playerName: kObj.prompts && kObj.prompts.Name ? kObj.prompts.Name : "Knight",
+    playerName: nameRoll.val,
+    nameRollId: nameRoll.id,
     knightId: kObj.id,
     title: kObj.name,
     page: kObj.page,
@@ -1563,6 +1581,16 @@ function createKnightEntry(startMode, forcedKnightObj) {
     exhausted: false,
     wounded: false
   };
+}
+
+function rerollRosterKnightName(idx) {
+  if (!state.company[idx]) return;
+  const nameRoll = rollKnightPromptSingle("Name");
+  state.company[idx].playerName = nameRoll.val;
+  state.company[idx].nameRollId = nameRoll.id;
+  renderCompanyRoster();
+  saveState();
+  setBanner(`Name Roll [${nameRoll.id}] (p.${nameRoll.page}) = <strong>${nameRoll.val}</strong>`);
 }
 
 function rollNewPlayerKnight(forcedId) {
@@ -1617,8 +1645,11 @@ function renderCompanyRoster() {
     const safeTitle = (k.title || "Knight").replace(/'/g, "\\'");
     return `
       <div class="roster-card">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:0.4rem;">
-          <input type="text" value="${k.playerName}" oninput="updateRosterField(${idx}, 'playerName', this.value)" style="font-weight:700;width:44%;" />
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:0.35rem;">
+          <div style="display:flex;align-items:center;gap:0.25rem;flex:1;">
+            <input type="text" value="${k.playerName}" oninput="updateRosterField(${idx}, 'playerName', this.value)" style="font-weight:700;width:100%;" />
+            <button class="btn btn-sm" onclick="rerollRosterKnightName(${idx})" title="Roll d6+d12 on Book Name Table" style="padding:0.25rem 0.45rem;">🎲</button>
+          </div>
           <span class="tag">${k.title} (p.${k.page})</span>
           <button class="btn btn-sm btn-danger" onclick="removeRosterKnight(${idx})">✕</button>
         </div>
@@ -1821,6 +1852,15 @@ function triggerSparkCardRoll(cat, tableName) {
   setBanner(`${tableName}: <strong>${res.combined}</strong>`);
 }
 
+function triggerKnightPromptCardRoll(promptKey) {
+  const res = rollKnightPromptSingle(promptKey);
+  const el = document.getElementById(`spark-res-Knight-${promptKey}`);
+  if (el) {
+    el.innerHTML = `[${res.id}] (p.${res.page}) ➔ <strong>${res.val}</strong>`;
+  }
+  setBanner(`Knight ${promptKey} [${res.id}]: <strong>${res.val}</strong>`);
+}
+
 function filterSparkCategory(cat) {
   sparkCategoryFilter = cat;
   renderSparkTables();
@@ -1860,6 +1900,41 @@ function renderSparkTables() {
       `;
     });
   });
+
+  // Render the 7 Knight Page Prompt Tables (d6+d12: Person, Name, Characteristic, Object, Beast, State, Theme)
+  if (sparkCategoryFilter === "All" || sparkCategoryFilter === "Knight") {
+    KNIGHT_PROMPT_KEYS.forEach(pKey => {
+      const initRoll = rollKnightPromptSingle(pKey);
+      const rowsHtml = window.MB_DATA.knights.map(k => {
+        const val = (k.prompts && k.prompts[pKey]) ? k.prompts[pKey] : "";
+        return `<tr><td><strong>${k.id}</strong></td><td>${val}</td><td style="color:var(--text-muted);">p.${k.page}</td></tr>`;
+      }).join("");
+
+      html += `
+        <div class="card" style="margin-bottom:0;background:var(--bg-subtle);">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.45rem;">
+            <div>
+              <span class="tag" style="background:var(--bg-surface);">Knight</span>
+              <strong style="margin-left:0.25rem;">${pKey}</strong>
+            </div>
+            <button class="btn btn-sm btn-primary" onclick="triggerKnightPromptCardRoll('${pKey}')">Roll d6+d12</button>
+          </div>
+          <div id="spark-res-Knight-${pKey}" style="background:var(--bg-surface);padding:0.5rem 0.65rem;border-radius:6px;border:1px solid var(--border);font-size:0.9rem;margin-bottom:0.4rem;">
+            [${initRoll.id}] (p.${initRoll.page}) ➔ <strong>${initRoll.val}</strong>
+          </div>
+          <details style="font-size:0.78rem;">
+            <summary style="cursor:pointer;color:var(--text-secondary);">All 72 Entries (d6+d12 Book Table)</summary>
+            <div style="max-height:240px;overflow-y:auto;margin-top:0.25rem;">
+              <table class="ref-table" style="font-size:0.76rem;">
+                <thead><tr><th>d6+d12</th><th>${pKey}</th><th>Page</th></tr></thead>
+                <tbody>${rowsHtml}</tbody>
+              </table>
+            </div>
+          </details>
+        </div>
+      `;
+    });
+  }
 
   grid.innerHTML = html;
 }
