@@ -679,18 +679,8 @@ function getBlankRealmHexBox(r, c) {
   return { x0, y0, w, h, cx, cy, verts };
 }
 
-function setMapTouchMode(mode) {
-  mapTouchMode = mode;
-  document.getElementById("touch-mode-inspect").classList.toggle("active", mode === "inspect");
-  document.getElementById("touch-mode-move").classList.toggle("active", mode === "move");
-}
-
 function handleHexTap(key) {
-  if (mapTouchMode === "move") {
-    moveCompanyToHex(key);
-  } else {
-    selectHex(key);
-  }
+  selectHex(key);
 }
 
 const HEX_SIDE_LABELS = ["N", "NE", "SE", "S", "SW", "NW"];
@@ -760,8 +750,19 @@ function pickDispersedMythHexes(holdingCoords) {
   return placedMyths;
 }
 
+// Bell-curve / half-normal distribution for Barrier sides (1 is most common, tapering down to 6 as least common):
+// 1 side: 36%, 2 sides: 30%, 3 sides: 19%, 4 sides: 9%, 5 sides: 4%, 6 sides: 2%
 function rollRandomBarrierSides() {
-  const count = rollDie(6); // 1 to 6 sides of the hex blocked
+  const weights = [36, 30, 19, 9, 4, 2];
+  let pick = Math.random() * 100;
+  let count = 1;
+  for (let i = 0; i < weights.length; i++) {
+    pick -= weights[i];
+    if (pick <= 0) {
+      count = i + 1;
+      break;
+    }
+  }
   const pool = [0, 1, 2, 3, 4, 5];
   for (let i = pool.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -1006,10 +1007,10 @@ function buildRealmSvgInnerMarkup(forcePlayerClean) {
       const hasHolding = !!hName;
       const hasSecretMark = !hideSecrets && (hex.mythSlot || hex.landmark);
 
-      // 1. Official Blank Realm Terrain Stamp (1-12)
+      // 1. Official Blank Realm Terrain Stamp (1-12) — softened to gray so Holdings, Landmarks & Barriers stand out boldly
       const tStamp = TERRAIN_STAMPS[tName] || TERRAIN_STAMPS.Plains;
       if (!hasHolding) {
-        const tOpacity = hasSecretMark ? "0.28" : (hex.river ? "0.45" : "0.94");
+        const tOpacity = hasSecretMark ? "0.22" : (hex.river ? "0.28" : "0.40");
         terrainLayer += `<image href="${tStamp}" x="${(box.x0 + 1.2).toFixed(2)}" y="${(box.y0 + 1.0).toFixed(2)}" width="${(box.w - 2.4).toFixed(2)}" height="${(box.h - 2.0).toFixed(2)}" opacity="${tOpacity}" preserveAspectRatio="xMidYMid meet" pointer-events="none" />`;
       }
 
@@ -1018,7 +1019,7 @@ function buildRealmSvgInnerMarkup(forcePlayerClean) {
         riverPts.push({ r, c, x: box.cx, y: box.cy });
       }
 
-      // 3. Red-Ink Barrier Hex Edges (1-6 randomly chosen sides of the hex, Referee View only)
+      // 3. Red-Ink Barrier Hex Edges (1-6 bell-curve sides of the hex, Referee View only)
       if (!hideSecrets && hex.barrier) {
         if (!Array.isArray(hex.barrierSides) || hex.barrierSides.length === 0) {
           hex.barrierSides = rollRandomBarrierSides();
@@ -1027,14 +1028,14 @@ function buildRealmSvgInnerMarkup(forcePlayerClean) {
           const s = Number(sideIdx) % 6;
           const pA = box.verts[s];
           const pB = box.verts[(s + 1) % 6];
-          barrierLayer += `<line x1="${pA[0].toFixed(1)}" y1="${pA[1].toFixed(1)}" x2="${pB[0].toFixed(1)}" y2="${pB[1].toFixed(1)}" stroke="#dc2626" stroke-width="2.5" stroke-linecap="round" pointer-events="none" />`;
+          barrierLayer += `<line x1="${pA[0].toFixed(1)}" y1="${pA[1].toFixed(1)}" x2="${pB[0].toFixed(1)}" y2="${pB[1].toFixed(1)}" stroke="#dc2626" stroke-width="2.9" stroke-linecap="round" pointer-events="none" />`;
         });
       }
 
       // 4. Holdings, Myths (1-6), and Red-Ink Landmarks
       if (hasHolding) {
         const hStamp = HOLDING_STAMPS[hName] || HOLDING_STAMPS.Fortress;
-        featureLayer += `<circle cx="${box.cx.toFixed(1)}" cy="${box.cy.toFixed(1)}" r="15.5" fill="#ffffff" opacity="0.92" pointer-events="none" />`;
+        featureLayer += `<circle cx="${box.cx.toFixed(1)}" cy="${box.cy.toFixed(1)}" r="15.8" fill="#ffffff" opacity="0.96" pointer-events="none" />`;
         featureLayer += `<image href="${hStamp}" x="${(box.x0 + 2.5).toFixed(2)}" y="${(box.y0 + 1.0).toFixed(2)}" width="${(box.w - 5.0).toFixed(2)}" height="${(box.h - 3.0).toFixed(2)}" preserveAspectRatio="xMidYMid meet" pointer-events="none" />`;
         if (hName === "Seat of Power") {
           featureLayer += `
@@ -1044,14 +1045,14 @@ function buildRealmSvgInnerMarkup(forcePlayerClean) {
         }
       } else if (!hideSecrets && hex.mythSlot) {
         featureLayer += `
-          <circle cx="${box.cx.toFixed(1)}" cy="${box.cy.toFixed(1)}" r="11.2" fill="#ffffff" stroke="#dc2626" stroke-width="2.0" pointer-events="none" />
-          <circle cx="${box.cx.toFixed(1)}" cy="${box.cy.toFixed(1)}" r="8.8" fill="none" stroke="#dc2626" stroke-width="0.7" stroke-dasharray="2,1.5" pointer-events="none" />
+          <circle cx="${box.cx.toFixed(1)}" cy="${box.cy.toFixed(1)}" r="11.4" fill="#ffffff" stroke="#dc2626" stroke-width="2.2" pointer-events="none" />
+          <circle cx="${box.cx.toFixed(1)}" cy="${box.cy.toFixed(1)}" r="8.8" fill="none" stroke="#dc2626" stroke-width="0.8" stroke-dasharray="2,1.5" pointer-events="none" />
           <text x="${box.cx.toFixed(1)}" y="${(box.cy + 3.8).toFixed(1)}" text-anchor="middle" font-family="Georgia, serif" font-size="11.5" font-weight="700" fill="#dc2626" pointer-events="none">${hex.mythSlot}</text>
         `;
       } else if (!hideSecrets && hex.landmark && LANDMARK_STAMPS[hex.landmark]) {
         const lStamp = LANDMARK_STAMPS[hex.landmark];
-        featureLayer += `<circle cx="${box.cx.toFixed(1)}" cy="${box.cy.toFixed(1)}" r="12.5" fill="#ffffff" opacity="0.82" pointer-events="none" />`;
-        featureLayer += `<image href="${lStamp}" x="${(box.cx - 12.5).toFixed(2)}" y="${(box.cy - 11.0).toFixed(2)}" width="25" height="22" preserveAspectRatio="xMidYMid meet" pointer-events="none" />`;
+        featureLayer += `<circle cx="${box.cx.toFixed(1)}" cy="${box.cy.toFixed(1)}" r="13.0" fill="#ffffff" opacity="0.90" pointer-events="none" />`;
+        featureLayer += `<image href="${lStamp}" x="${(box.cx - 13.0).toFixed(2)}" y="${(box.cy - 11.5).toFixed(2)}" width="26" height="23" preserveAspectRatio="xMidYMid meet" pointer-events="none" />`;
       }
 
       // 5. Company Marker & Selected Hex Outline
@@ -2096,8 +2097,18 @@ window.addEventListener("DOMContentLoaded", () => {
   if (!state.theme) state.theme = "light";
   if (!state.pageBg) state.pageBg = "nobg";
   if (!hadSaved || !Object.keys(state.hexes).length) {
+    state.barrierCurveMigrated = true;
     generateStarterRealm();
   } else {
+    if (!state.barrierCurveMigrated) {
+      Object.values(state.hexes).forEach(hex => {
+        if (hex && hex.barrier) {
+          hex.barrierSides = rollRandomBarrierSides();
+        }
+      });
+      state.barrierCurveMigrated = true;
+      saveState();
+    }
     renderRealmMap();
     renderSelectedHexInspector();
     renderActiveMyths();
