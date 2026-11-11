@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="Bastionland Ref" />
   <title>Mythic Bastionland — Referee Companion</title>
-  <link rel="stylesheet" href="styles.css?v=13" />
+  <link rel="stylesheet" href="styles.css?v=17" />
 </head>
 <body>
 
@@ -21,13 +21,25 @@
         </div>
       </div>
 
-      <!-- Time, Phase, Season, Age Tracker -->
+      <!-- Time, Phase, 3-Season / 9-Month Calendar, Moon & Age Tracker -->
       <div class="time-tracker">
         <div class="tracker-group">
-          <span class="tracker-label">Day</span>
-          <button class="btn btn-sm" onclick="adjustDay(-1)">−</button>
-          <strong id="day-display" style="min-width:24px;text-align:center;">1</strong>
-          <button class="btn btn-sm" onclick="adjustDay(1)">+</button>
+          <select id="year-select" onchange="setYear(Number(this.value))" aria-label="Year" title="Campaign Year"></select>
+          <select id="season-select" onchange="setSeason(this.value)" aria-label="Season" title="Season (3 Months each)">
+            <option value="Spring">🌱 Spring (Green)</option>
+            <option value="Harvest">🌾 Harvest (Gold)</option>
+            <option value="Winter">❄️ Winter (Grey)</option>
+          </select>
+          <select id="month-select" onchange="setMonth(Number(this.value))" aria-label="Month" title="Month (1–9)"></select>
+        </div>
+
+        <div class="tracker-group">
+          <button class="btn btn-sm" onclick="adjustDay(-1)" title="Previous Day">−</button>
+          <select id="day-select" onchange="setDayOfMonth(Number(this.value))" aria-label="Day of Month" title="Day of Month (1–28)"></select>
+          <button class="btn btn-sm" onclick="adjustDay(1)" title="Next Day">+</button>
+          <button id="header-moon-festival-btn" class="btn btn-sm calendar-open-pill" onclick="openCalendarModal()" title="Open 9-Month Bastionland Calendar & Lunar Tracker">
+            🌑 New Moon
+          </button>
         </div>
 
         <div class="tracker-group">
@@ -38,16 +50,12 @@
         </div>
 
         <div class="tracker-group">
-          <select id="season-select" onchange="setSeason(this.value)" aria-label="Season">
-            <option value="Spring">Spring</option>
-            <option value="Harvest">Harvest</option>
-            <option value="Winter">Winter</option>
-          </select>
-          <select id="age-select" onchange="setAge(this.value)" aria-label="Age">
+          <select id="age-select" onchange="setAge(this.value)" aria-label="Age" title="Character / Realm Age">
             <option value="Young">Young</option>
             <option value="Mature">Mature</option>
             <option value="Old">Old</option>
           </select>
+          <button class="btn btn-sm" onclick="openCalendarModal()" title="Open Full 9-Month Calendar & Edit Date">📅 Calendar</button>
         </div>
       </div>
 
@@ -672,11 +680,92 @@
   </div>
 
   <!-- ==========================================
+       3-SEASON / 9-MONTH BASTIONLAND CALENDAR MODAL
+       ========================================== -->
+  <div id="calendar-modal" class="page-modal-backdrop" onclick="closeCalendarModal(event)">
+    <div class="card calendar-modal-card" onclick="event.stopPropagation()">
+      <div class="card-header" style="margin-bottom:0.75rem;">
+        <div>
+          <div class="card-title">📅 Calendar of the Realm — 3 Seasons, 9 Months &amp; Lunar Phases</div>
+          <div style="font-size:0.78rem;color:var(--text-muted);">
+            Rulebook p. 17 • 3 Seasons (Green, Gold, Grey) • 9 Months of 28 Days • Sacred Feasts, Masses &amp; Realm Collections
+          </div>
+        </div>
+        <button class="btn btn-sm" onclick="closeCalendarModal()">✕ Close</button>
+      </div>
+
+      <!-- Top Date & Year Editor Bar -->
+      <div class="calendar-editor-bar">
+        <div class="calendar-field">
+          <label>Year</label>
+          <div style="display:flex;gap:0.25rem;align-items:center;">
+            <button class="btn btn-sm" onclick="adjustYear(-1)">−</button>
+            <input type="number" id="cal-modal-year" min="1" max="999" value="1" onchange="setYear(Number(this.value))" style="width:68px;text-align:center;font-weight:700;" />
+            <button class="btn btn-sm" onclick="adjustYear(1)">+</button>
+          </div>
+        </div>
+
+        <div class="calendar-field">
+          <label>Season</label>
+          <select id="cal-modal-season" onchange="setSeason(this.value)">
+            <option value="Spring">🌱 Spring — The Green Season</option>
+            <option value="Harvest">🌾 Harvest — The Gold Season</option>
+            <option value="Winter">❄️ Winter — The Grey Season</option>
+          </select>
+        </div>
+
+        <div class="calendar-field">
+          <label>Month (1–9)</label>
+          <select id="cal-modal-month" onchange="setMonth(Number(this.value))"></select>
+        </div>
+
+        <div class="calendar-field">
+          <label>Day (1–28)</label>
+          <select id="cal-modal-day" onchange="setDayOfMonth(Number(this.value))"></select>
+        </div>
+
+        <div class="calendar-field">
+          <label>Phase</label>
+          <select id="cal-modal-phase" onchange="setPhase(this.value)">
+            <option value="Morning">🌅 Morning</option>
+            <option value="Afternoon">☀️ Afternoon</option>
+            <option value="Night">🌙 Night</option>
+          </select>
+        </div>
+
+        <div class="calendar-field">
+          <label>Age</label>
+          <select id="cal-modal-age" onchange="setAge(this.value)">
+            <option value="Young">Young (Green)</option>
+            <option value="Mature">Mature (Gold)</option>
+            <option value="Old">Old (Grey)</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Current Date Summary & Celebration Banner -->
+      <div id="cal-modal-current-banner" class="cal-current-banner"></div>
+
+      <!-- 9-Month / 3-Season Selector Strip -->
+      <div id="cal-modal-seasons-strip" class="cal-seasons-strip"></div>
+
+      <!-- 28-Day Lunar & Festival Grid for Selected Month -->
+      <div id="cal-modal-days-grid" class="cal-days-grid"></div>
+
+      <!-- Selected Day Chronicle / Note Input -->
+      <div class="cal-note-bar">
+        <label id="cal-note-label" style="font-size:0.8rem;font-weight:600;white-space:nowrap;">Chronicle Note for Date:</label>
+        <input type="text" id="cal-day-note-input" placeholder="Record an omen, battle, oath, or event on this date..." oninput="saveCurrentDayNote(this.value)" style="flex:1;" />
+      </div>
+    </div>
+  </div>
+
+  <!-- ==========================================
        PRINTABLE PLAYER REALM SHEET (FOR PRINT TO PDF)
        ========================================== -->
   <div id="printable-player-sheet" class="printable-player-sheet" aria-hidden="true"></div>
 
-  <script src="data.js?v=16"></script>
-  <script src="app.js?v=16"></script>
+  <script src="data.js?v=17"></script>
+  <script src="app.js?v=17"></script>
 </body>
 </html>

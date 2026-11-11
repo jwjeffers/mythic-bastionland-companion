@@ -5,10 +5,13 @@ const STORAGE_KEY = "MB_REFEREE_STATE_V1";
 let state = {
   theme: "light",
   pageBg: "nobg", // "nobg" (clean white) or "bg" (parchment)
-  day: 1,
+  year: 1,
+  month: 1,       // 1–9 across the 3 Seasons (Spring: 1-3, Harvest: 4-6, Winter: 7-9)
+  day: 1,         // 1–28 within the current Month
   phase: "Morning",
   season: "Spring",
   age: "Young",
+  calendarNotes: {},
   playerView: false,
   selectedHex: "3,3",
   companyHex: "3,3",
@@ -249,20 +252,293 @@ function loadState() {
   return false;
 }
 
+// ==========================================
+// 3-SEASON / 9-MONTH BASTIONLAND CALENDAR & LUNAR PHASES (Rulebook p. 17)
+// ==========================================
+const BASTIONLAND_MONTHS = [
+  // Spring — The Green Season
+  {
+    num: 1,
+    name: "Sunwake",
+    season: "Spring",
+    seasonSub: "The Green Season",
+    stage: "Early Spring",
+    festivalDay: 1,
+    festivalIcon: "☀️",
+    festivalName: "Feast of the Sun",
+    festivalDesc: "A day of excess and revelry to strengthen both the people and the land. (Rulebook p. 17)"
+  },
+  {
+    num: 2,
+    name: "Sceptreide",
+    season: "Spring",
+    seasonSub: "The Green Season",
+    stage: "Midspring",
+    festivalDay: 14,
+    festivalIcon: "👑",
+    festivalName: "Sceptremass",
+    festivalDesc: "Midspring assembly where the Seat of Power gathers local rulers to renew their vows of loyalty. (Rulebook p. 17)"
+  },
+  {
+    num: 3,
+    name: "Greenward",
+    season: "Spring",
+    seasonSub: "The Green Season",
+    stage: "Late Spring",
+    festivalDay: 28,
+    festivalIcon: "🪙",
+    festivalName: "Day of the Tax",
+    festivalDesc: "Spring ends with the Tax, a share of coins collected by the Realm. (Rulebook p. 17)"
+  },
+  // Harvest — The Gold Season
+  {
+    num: 4,
+    name: "Starwake",
+    season: "Harvest",
+    seasonSub: "The Gold Season",
+    stage: "Early Harvest",
+    festivalDay: 1,
+    festivalIcon: "✨",
+    festivalName: "Feast of the Stars",
+    festivalDesc: "Harvest begins with the Feast of the Stars, a night of honours, unions, and contests. (Rulebook p. 17)"
+  },
+  {
+    num: 5,
+    name: "Elderide",
+    season: "Harvest",
+    seasonSub: "The Gold Season",
+    stage: "Midharvest",
+    festivalDay: 14,
+    festivalIcon: "👁️",
+    festivalName: "Eldermass",
+    festivalDesc: "Midharvest sees Eldermass, a secretive assembly of Seers and trusted associates. (Rulebook p. 17)"
+  },
+  {
+    num: 6,
+    name: "Goldward",
+    season: "Harvest",
+    seasonSub: "The Gold Season",
+    stage: "Late Harvest",
+    festivalDay: 28,
+    festivalIcon: "🌾",
+    festivalName: "Day of the Tithe",
+    festivalDesc: "Harvest ends with the Tithe, a share of food and drink collected by the Realm. (Rulebook p. 17)"
+  },
+  // Winter — The Grey Season
+  {
+    num: 7,
+    name: "Moonwake",
+    season: "Winter",
+    seasonSub: "The Grey Season",
+    stage: "Early Winter",
+    festivalDay: 1,
+    festivalIcon: "🌙",
+    festivalName: "Feast of the Moon",
+    festivalDesc: "Winter begins with the Feast of the Moon, a solemn reflection of mortality and history. (Rulebook p. 17)"
+  },
+  {
+    num: 8,
+    name: "Kindleide",
+    season: "Winter",
+    seasonSub: "The Grey Season",
+    stage: "Midwinter",
+    festivalDay: 14,
+    festivalIcon: "🕯️",
+    festivalName: "Kindlemass",
+    festivalDesc: "Midwinter sees Kindlemass, a sacred day of warmth and goodwill, where each home must open their doors to all. (Rulebook p. 17)"
+  },
+  {
+    num: 9,
+    name: "Greyward",
+    season: "Winter",
+    seasonSub: "The Grey Season",
+    stage: "Late Winter",
+    festivalDay: 28,
+    festivalIcon: "⚒️",
+    festivalName: "Day of the Levy",
+    festivalDesc: "Winter ends with the Levy, a share of materials and crafted goods collected by the Realm. (Rulebook p. 17)"
+  }
+];
+
+function getMonthInfo(monthNum) {
+  const m = Math.max(1, Math.min(9, Number(monthNum) || 1));
+  return BASTIONLAND_MONTHS[m - 1];
+}
+
+function getMoonPhaseForDay(dayOfMonth) {
+  const d = Math.max(1, Math.min(28, Number(dayOfMonth) || 1));
+  if (d === 1) return { icon: "🌑", name: "New Moon", short: "New" };
+  if (d >= 2 && d <= 6) return { icon: "🌒", name: "Waxing Crescent", short: "Wax Cres" };
+  if (d === 7 || d === 8) return { icon: "🌓", name: "First Quarter", short: "1st Qtr" };
+  if (d >= 9 && d <= 13) return { icon: "🌔", name: "Waxing Gibbous", short: "Wax Gib" };
+  if (d === 14 || d === 15) return { icon: "🌕", name: "Full Moon", short: "Full Moon" };
+  if (d >= 16 && d <= 20) return { icon: "🌖", name: "Waning Gibbous", short: "Wan Gib" };
+  if (d === 21 || d === 22) return { icon: "🌗", name: "Last Quarter", short: "Last Qtr" };
+  if (d >= 23 && d <= 27) return { icon: "🌘", name: "Waning Crescent", short: "Wan Cres" };
+  return { icon: "🌑", name: "Dark Moon", short: "Dark Moon" };
+}
+
+function getCalendarNoteKey(y, m, d) {
+  return `Y${y || state.year}-M${m || state.month}-D${d || state.day}`;
+}
+
+function initCalendarDropdowns() {
+  const yearSel = document.getElementById("year-select");
+  if (yearSel && !yearSel.options.length) {
+    let yHtml = "";
+    for (let y = 1; y <= 50; y++) {
+      yHtml += `<option value="${y}">Year ${y}</option>`;
+    }
+    yearSel.innerHTML = yHtml;
+  }
+
+  const monthOptionsHtml = BASTIONLAND_MONTHS.map(m =>
+    `<option value="${m.num}">${m.num}. ${m.name} (${m.stage})</option>`
+  ).join("");
+  const monthSel = document.getElementById("month-select");
+  if (monthSel && !monthSel.options.length) monthSel.innerHTML = monthOptionsHtml;
+  const calModalMonth = document.getElementById("cal-modal-month");
+  if (calModalMonth && !calModalMonth.options.length) calModalMonth.innerHTML = monthOptionsHtml;
+
+  let dayOptionsHtml = "";
+  for (let d = 1; d <= 28; d++) {
+    const moon = getMoonPhaseForDay(d);
+    dayOptionsHtml += `<option value="${d}">Day ${d} (${moon.icon})</option>`;
+  }
+  const daySel = document.getElementById("day-select");
+  if (daySel && !daySel.options.length) daySel.innerHTML = dayOptionsHtml;
+  const calModalDay = document.getElementById("cal-modal-day");
+  if (calModalDay && !calModalDay.options.length) calModalDay.innerHTML = dayOptionsHtml;
+}
+
+function normalizeCalendarState() {
+  if (!state.year || state.year < 1) state.year = 1;
+  if (!state.month || state.month < 1 || state.month > 9) {
+    if (state.season === "Harvest") state.month = 4;
+    else if (state.season === "Winter") state.month = 7;
+    else state.month = 1;
+  }
+  if (!state.day || state.day < 1) state.day = 1;
+  if (state.day > 28) state.day = ((state.day - 1) % 28) + 1;
+  if (!state.calendarNotes) state.calendarNotes = {};
+  const mInfo = getMonthInfo(state.month);
+  state.season = mInfo.season;
+}
+
 function syncHeaderUI() {
-  document.getElementById("day-display").textContent = state.day;
+  initCalendarDropdowns();
+  normalizeCalendarState();
+
+  const mInfo = getMonthInfo(state.month);
+  const moon = getMoonPhaseForDay(state.day);
+  const isFestival = state.day === mInfo.festivalDay;
+
+  const yearSel = document.getElementById("year-select");
+  if (yearSel) {
+    if (state.year > 50 && !yearSel.querySelector(`option[value="${state.year}"]`)) {
+      yearSel.insertAdjacentHTML("beforeend", `<option value="${state.year}">Year ${state.year}</option>`);
+    }
+    yearSel.value = String(state.year);
+  }
+
+  const seasonSel = document.getElementById("season-select");
+  if (seasonSel) seasonSel.value = state.season;
+
+  const monthSel = document.getElementById("month-select");
+  if (monthSel) monthSel.value = String(state.month);
+
+  const daySel = document.getElementById("day-select");
+  if (daySel) daySel.value = String(state.day);
+
+  const moonBtn = document.getElementById("header-moon-festival-btn");
+  if (moonBtn) {
+    if (isFestival) {
+      moonBtn.innerHTML = `${moon.icon} ${moon.short} • ${mInfo.festivalIcon} ${mInfo.festivalName}`;
+      moonBtn.classList.add("has-festival");
+    } else {
+      moonBtn.innerHTML = `${moon.icon} ${moon.name}`;
+      moonBtn.classList.remove("has-festival");
+    }
+  }
+
   document.querySelectorAll(".phase-pill").forEach(el => {
     el.classList.toggle("active", el.getAttribute("data-phase") === state.phase);
   });
-  document.getElementById("season-select").value = state.season;
-  document.getElementById("age-select").value = state.age;
+
+  const ageSel = document.getElementById("age-select");
+  if (ageSel) ageSel.value = state.age;
+
   applyTheme();
+  renderCalendarModal();
+}
+
+function setYear(yr) {
+  state.year = Math.max(1, Number(yr) || 1);
+  syncHeaderUI();
+  saveState();
+  setBanner(`Year ${state.year} of the Realm`);
+}
+
+function adjustYear(delta) {
+  setYear(Math.max(1, (state.year || 1) + delta));
+}
+
+function setMonth(monthNum) {
+  state.month = Math.max(1, Math.min(9, Number(monthNum) || 1));
+  const mInfo = getMonthInfo(state.month);
+  state.season = mInfo.season;
+  syncHeaderUI();
+  saveState();
+  announceCurrentDateBanner();
+}
+
+function setDayOfMonth(dayNum) {
+  state.day = Math.max(1, Math.min(28, Number(dayNum) || 1));
+  syncHeaderUI();
+  saveState();
+  announceCurrentDateBanner();
 }
 
 function adjustDay(delta) {
-  state.day = Math.max(1, state.day + delta);
+  let y = state.year || 1;
+  let m = state.month || 1;
+  let d = (state.day || 1) + delta;
+
+  while (d > 28) {
+    d -= 28;
+    m += 1;
+    if (m > 9) {
+      m = 1;
+      y += 1;
+    }
+  }
+  while (d < 1) {
+    if (m === 1 && y === 1) {
+      d = 1;
+      break;
+    }
+    d += 28;
+    m -= 1;
+    if (m < 1) {
+      m = 9;
+      y = Math.max(1, y - 1);
+    }
+  }
+
+  state.year = y;
+  state.month = m;
+  state.day = d;
+  state.season = getMonthInfo(m).season;
   syncHeaderUI();
   saveState();
+  announceCurrentDateBanner();
+}
+
+function announceCurrentDateBanner() {
+  const mInfo = getMonthInfo(state.month);
+  const moon = getMoonPhaseForDay(state.day);
+  const fest = state.day === mInfo.festivalDay ? ` • <strong>${mInfo.festivalIcon} ${mInfo.festivalName}</strong>` : "";
+  setBanner(`Year ${state.year}, ${mInfo.name} ${state.day} (${mInfo.season}) • ${moon.icon} ${moon.name}${fest}`);
 }
 
 function setPhase(phase) {
@@ -270,7 +546,8 @@ function setPhase(phase) {
   syncHeaderUI();
   saveState();
   if (phase === "Night") {
-    setBanner("Night: Travel costs -d6 SPI");
+    const moon = getMoonPhaseForDay(state.day);
+    setBanner(`Night (${moon.icon} ${moon.name}): Travel costs -d6 SPI`);
   } else if (phase === "Morning") {
     setBanner("Morning: No sleep = -d6 CLA");
   } else {
@@ -282,21 +559,164 @@ function advancePhase() {
   if (state.phase === "Morning") setPhase("Afternoon");
   else if (state.phase === "Afternoon") setPhase("Night");
   else {
-    state.day += 1;
+    adjustDay(1);
     setPhase("Morning");
   }
 }
 
 function setSeason(season) {
   state.season = season;
+  const currentMonthSeason = getMonthInfo(state.month).season;
+  if (currentMonthSeason !== season) {
+    if (season === "Spring") state.month = 1;
+    else if (season === "Harvest") state.month = 4;
+    else if (season === "Winter") state.month = 7;
+  }
+  syncHeaderUI();
   saveState();
-  setBanner(`Season: ${season}`);
+  announceCurrentDateBanner();
 }
 
 function setAge(age) {
   state.age = age;
+  syncHeaderUI();
   saveState();
   setBanner(`Age: ${age}`);
+}
+
+function openCalendarModal() {
+  const modal = document.getElementById("calendar-modal");
+  if (!modal) return;
+  renderCalendarModal();
+  modal.classList.add("open");
+}
+
+function closeCalendarModal(event) {
+  if (event && event.target && event.target.id !== "calendar-modal") return;
+  const modal = document.getElementById("calendar-modal");
+  if (modal) modal.classList.remove("open");
+}
+
+function selectCalendarDay(monthNum, dayNum) {
+  state.month = monthNum;
+  state.day = dayNum;
+  state.season = getMonthInfo(monthNum).season;
+  syncHeaderUI();
+  saveState();
+  announceCurrentDateBanner();
+}
+
+function saveCurrentDayNote(val) {
+  if (!state.calendarNotes) state.calendarNotes = {};
+  const k = getCalendarNoteKey(state.year, state.month, state.day);
+  if (val && val.trim()) {
+    state.calendarNotes[k] = val.trim();
+  } else {
+    delete state.calendarNotes[k];
+  }
+  saveState();
+  renderCalendarModal(true);
+}
+
+function renderCalendarModal(skipNoteInputFocus) {
+  const modal = document.getElementById("calendar-modal");
+  if (!modal) return;
+
+  const mInfo = getMonthInfo(state.month);
+  const moon = getMoonPhaseForDay(state.day);
+  const isFestival = state.day === mInfo.festivalDay;
+
+  const yrIn = document.getElementById("cal-modal-year");
+  if (yrIn) yrIn.value = state.year;
+  const seasIn = document.getElementById("cal-modal-season");
+  if (seasIn) seasIn.value = state.season;
+  const monIn = document.getElementById("cal-modal-month");
+  if (monIn) monIn.value = String(state.month);
+  const dayIn = document.getElementById("cal-modal-day");
+  if (dayIn) dayIn.value = String(state.day);
+  const phaseIn = document.getElementById("cal-modal-phase");
+  if (phaseIn) phaseIn.value = state.phase;
+  const ageIn = document.getElementById("cal-modal-age");
+  if (ageIn) ageIn.value = state.age;
+
+  const banner = document.getElementById("cal-modal-current-banner");
+  if (banner) {
+    banner.innerHTML = `
+      <div>
+        <div style="font-weight:700;font-size:0.96rem;">
+          Year ${state.year} • Month ${mInfo.num}: ${mInfo.name} (${mInfo.stage} — ${mInfo.seasonSub}) • Day ${state.day} (${state.phase})
+        </div>
+        <div style="font-size:0.82rem;color:var(--text-secondary);margin-top:0.15rem;">
+          ${isFestival
+            ? `<strong style="color:var(--highlight);">${mInfo.festivalIcon} TODAY IS ${mInfo.festivalName.toUpperCase()}:</strong> ${mInfo.festivalDesc}`
+            : `<strong>Month Observance (Day ${mInfo.festivalDay}):</strong> ${mInfo.festivalIcon} <strong>${mInfo.festivalName}</strong> — ${mInfo.festivalDesc}`}
+        </div>
+      </div>
+      <div style="font-weight:700;font-size:0.92rem;background:var(--bg-surface);padding:0.35rem 0.65rem;border-radius:6px;border:1px solid var(--border);">
+        ${moon.icon} ${moon.name}
+      </div>
+    `;
+  }
+
+  const seasonsStrip = document.getElementById("cal-modal-seasons-strip");
+  if (seasonsStrip) {
+    const seasonGroups = [
+      { key: "Spring", title: "🌱 Spring — The Green Season", months: BASTIONLAND_MONTHS.slice(0, 3) },
+      { key: "Harvest", title: "🌾 Harvest — The Gold Season", months: BASTIONLAND_MONTHS.slice(3, 6) },
+      { key: "Winter", title: "❄️ Winter — The Grey Season", months: BASTIONLAND_MONTHS.slice(6, 9) }
+    ];
+    seasonsStrip.innerHTML = seasonGroups.map(sg => `
+      <div class="cal-season-box">
+        <div class="cal-season-title">
+          <span>${sg.title}</span>
+        </div>
+        <div class="cal-months-row">
+          ${sg.months.map(m => `
+            <button type="button" class="cal-month-btn ${state.month === m.num ? 'active' : ''}" onclick="setMonth(${m.num})">
+              <div><strong>${m.num}. ${m.name}</strong></div>
+              <div style="font-size:0.68rem;opacity:0.85;">${m.festivalIcon} ${m.festivalName}</div>
+            </button>
+          `).join("")}
+        </div>
+      </div>
+    `).join("");
+  }
+
+  const daysGrid = document.getElementById("cal-modal-days-grid");
+  if (daysGrid) {
+    let cellsHtml = "";
+    for (let d = 1; d <= 28; d++) {
+      const dm = getMoonPhaseForDay(d);
+      const isFest = d === mInfo.festivalDay;
+      const isSelected = d === state.day;
+      const noteKey = getCalendarNoteKey(state.year, state.month, d);
+      const noteText = (state.calendarNotes && state.calendarNotes[noteKey]) || "";
+      cellsHtml += `
+        <div class="cal-day-cell ${isSelected ? 'active' : ''} ${isFest ? 'festival-day' : ''}" onclick="selectCalendarDay(${state.month}, ${d})">
+          <div class="cal-day-top">
+            <span>Day ${d}</span>
+            <span title="${dm.name}">${dm.icon}</span>
+          </div>
+          <div class="cal-day-moon">${dm.short}</div>
+          ${isFest ? `<div class="cal-day-fest-badge">${mInfo.festivalIcon} ${mInfo.festivalName}</div>` : ""}
+          ${noteText ? `<div class="cal-day-note-dot" title="${noteText.replace(/"/g, '&quot;')}">📝 ${noteText}</div>` : ""}
+        </div>
+      `;
+    }
+    daysGrid.innerHTML = cellsHtml;
+  }
+
+  const noteLabel = document.getElementById("cal-note-label");
+  if (noteLabel) {
+    noteLabel.textContent = `📝 Note (Y${state.year}, ${mInfo.name} ${state.day}):`;
+  }
+  if (!skipNoteInputFocus) {
+    const noteInput = document.getElementById("cal-day-note-input");
+    if (noteInput) {
+      const k = getCalendarNoteKey(state.year, state.month, state.day);
+      noteInput.value = (state.calendarNotes && state.calendarNotes[k]) || "";
+    }
+  }
 }
 
 // ==========================================
@@ -1077,7 +1497,8 @@ function buildRealmSvgInnerMarkup(forcePlayerClean) {
     }
   }
 
-  // Build Hand-Inked River (Twin black ink banks + white water channel + ink water ripples, matching Sample Realm Sheet)
+  // Build Hand-Inked River (Twin gray banks + white water channel + gray water ripples, matching gray terrain tiles)
+  const riverStrokeGray = "#8e8e93";
   let riverLayer = "";
   if (riverPts.length >= 2) {
     riverPts.sort((a, b) => (a.r * 1.2 + a.c * 0.4) - (b.r * 1.2 + b.c * 0.4));
@@ -1091,13 +1512,13 @@ function buildRealmSvgInnerMarkup(forcePlayerClean) {
     }
     const d = buildCatmullRomSvgPath(pathPts);
     const ripples = riverPts.map(p => `
-      <line x1="${(p.x - 2.6).toFixed(1)}" y1="${(p.y - 1.5).toFixed(1)}" x2="${(p.x + 2.6).toFixed(1)}" y2="${(p.y - 1.5).toFixed(1)}" stroke="#18181b" stroke-width="0.75" stroke-linecap="round" />
-      <line x1="${(p.x - 1.8).toFixed(1)}" y1="${(p.y + 1.8).toFixed(1)}" x2="${(p.x + 2.2).toFixed(1)}" y2="${(p.y + 1.8).toFixed(1)}" stroke="#18181b" stroke-width="0.75" stroke-linecap="round" />
+      <line x1="${(p.x - 2.6).toFixed(1)}" y1="${(p.y - 1.5).toFixed(1)}" x2="${(p.x + 2.6).toFixed(1)}" y2="${(p.y - 1.5).toFixed(1)}" stroke="${riverStrokeGray}" stroke-width="0.75" stroke-linecap="round" />
+      <line x1="${(p.x - 1.8).toFixed(1)}" y1="${(p.y + 1.8).toFixed(1)}" x2="${(p.x + 2.2).toFixed(1)}" y2="${(p.y + 1.8).toFixed(1)}" stroke="${riverStrokeGray}" stroke-width="0.75" stroke-linecap="round" />
     `).join("");
 
     riverLayer = `
       <g pointer-events="none">
-        <path d="${d}" fill="none" stroke="#18181b" stroke-width="10.2" stroke-linecap="round" stroke-linejoin="round" />
+        <path d="${d}" fill="none" stroke="${riverStrokeGray}" stroke-width="10.2" stroke-linecap="round" stroke-linejoin="round" />
         <path d="${d}" fill="none" stroke="#ffffff" stroke-width="6.4" stroke-linecap="round" stroke-linejoin="round" />
         ${ripples}
       </g>
@@ -1106,8 +1527,8 @@ function buildRealmSvgInnerMarkup(forcePlayerClean) {
     const p = riverPts[0];
     riverLayer = `
       <g pointer-events="none">
-        <ellipse cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" rx="9" ry="5.5" fill="#ffffff" stroke="#18181b" stroke-width="1.8" />
-        <line x1="${(p.x - 4).toFixed(1)}" y1="${p.y.toFixed(1)}" x2="${(p.x + 4).toFixed(1)}" y2="${p.y.toFixed(1)}" stroke="#18181b" stroke-width="0.8" />
+        <ellipse cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" rx="9" ry="5.5" fill="#ffffff" stroke="${riverStrokeGray}" stroke-width="1.8" />
+        <line x1="${(p.x - 4).toFixed(1)}" y1="${p.y.toFixed(1)}" x2="${(p.x + 4).toFixed(1)}" y2="${p.y.toFixed(1)}" stroke="${riverStrokeGray}" stroke-width="0.8" />
       </g>
     `;
   }

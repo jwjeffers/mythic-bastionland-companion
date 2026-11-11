@@ -981,3 +981,209 @@ input:focus, select:focus, textarea:focus {
     width: auto;
   }
 }
+
+/* ==========================================
+   3-SEASON / 9-MONTH BASTIONLAND CALENDAR MODAL
+   ========================================== */
+.calendar-open-pill {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.calendar-open-pill.has-festival {
+  background: var(--highlight-bg);
+  color: var(--highlight);
+  border-color: var(--highlight);
+}
+
+.calendar-modal-card {
+  max-width: 960px;
+  width: 96vw;
+  max-height: 92vh;
+  overflow-y: auto;
+  margin: auto;
+  padding: 1.1rem 1.25rem;
+}
+
+.calendar-editor-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+  align-items: flex-end;
+  background: var(--bg-subtle);
+  padding: 0.65rem 0.85rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  margin-bottom: 0.75rem;
+}
+
+.calendar-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.calendar-field label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.cal-current-banner {
+  background: var(--bg-subtle);
+  border-left: 4px solid var(--highlight);
+  padding: 0.6rem 0.85rem;
+  border-radius: var(--radius-sm);
+  margin-bottom: 0.75rem;
+  font-size: 0.88rem;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.cal-seasons-strip {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.55rem;
+  margin-bottom: 0.75rem;
+}
+
+@media (max-width: 760px) {
+  .cal-seasons-strip {
+    grid-template-columns: 1fr;
+  }
+}
+
+.cal-season-box {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.45rem 0.55rem;
+  background: var(--bg-surface);
+}
+
+.cal-season-title {
+  font-size: 0.74rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin-bottom: 0.35rem;
+  display: flex;
+  justify-content: space-between;
+}
+
+.cal-months-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.3rem;
+}
+
+.cal-month-btn {
+  padding: 0.32rem 0.35rem;
+  font-size: 0.75rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-subtle);
+  color: var(--text-primary);
+  cursor: pointer;
+  text-align: center;
+  line-height: 1.2;
+}
+
+.cal-month-btn:hover {
+  background: var(--bg-hover);
+}
+
+.cal-month-btn.active {
+  background: var(--accent);
+  color: var(--accent-fg);
+  border-color: var(--accent);
+  font-weight: 700;
+}
+
+.cal-days-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.38rem;
+  margin-bottom: 0.75rem;
+}
+
+@media (max-width: 680px) {
+  .cal-days-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.cal-day-cell {
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 0.38rem 0.45rem;
+  min-height: 64px;
+  background: var(--bg-surface);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  transition: transform 0.08s ease, border-color 0.1s ease;
+}
+
+.cal-day-cell:hover {
+  border-color: var(--border-strong);
+  background: var(--bg-subtle);
+}
+
+.cal-day-cell.active {
+  border: 2px solid var(--accent);
+  box-shadow: 0 0 0 2px rgba(30, 41, 59, 0.15);
+  background: var(--bg-subtle);
+}
+
+.cal-day-cell.festival-day {
+  background: var(--highlight-bg);
+  border-color: var(--highlight);
+}
+
+.cal-day-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.cal-day-moon {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cal-day-fest-badge {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--highlight);
+  line-height: 1.15;
+  margin-top: 0.15rem;
+}
+
+.cal-day-note-dot {
+  font-size: 0.68rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 0.1rem;
+}
+
+.cal-note-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  background: var(--bg-subtle);
+  padding: 0.55rem 0.75rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+}
