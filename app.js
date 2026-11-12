@@ -13,6 +13,9 @@ let state = {
   age: "Young",
   calendarNotes: {},
   playerView: false,
+  activeRealmId: "realm_1",
+  realmName: "The Green Marches",
+  savedRealms: [],
   selectedHex: "3,3",
   companyHex: "3,3",
   hexes: {},
@@ -170,8 +173,229 @@ function switchTab(tabId) {
   }
 }
 
-// New Realm Confirmation Modal
+// ==========================================
+// MULTI-REALM / SAVED MAPS LIBRARY MANAGER
+// ==========================================
+function rollRandomRealmName() {
+  try {
+    const landRows = window.MB_DATA.sparkTables.Nature.Land.rows;
+    const adj = landRows[rollDie(12) - 1][0];
+    const suffixes = ["Marches", "Reach", "Vale", "Shire", "Fells", "Bastion", "Mark", "Wilds", "Wold", "Dales"];
+    const suf = suffixes[Math.floor(Math.random() * suffixes.length)];
+    return `The ${adj} ${suf}`;
+  } catch (e) {
+    return `Realm #${(state.savedRealms ? state.savedRealms.length : 0) + 1}`;
+  }
+}
+
+function countRealmHoldings(hexesObj) {
+  if (!hexesObj) return 0;
+  return Object.values(hexesObj).filter(h => h && h.holding).length;
+}
+
+function ensureSavedRealmsInitialized() {
+  if (!Array.isArray(state.savedRealms)) state.savedRealms = [];
+  if (!state.realmName) state.realmName = "The Green Marches";
+  if (!state.activeRealmId) state.activeRealmId = "realm_1";
+
+  if (state.savedRealms.length === 0 && state.hexes && Object.keys(state.hexes).length > 0) {
+    state.savedRealms.push({
+      id: state.activeRealmId,
+      name: state.realmName,
+      updatedAt: Date.now(),
+      companyHex: state.companyHex || "3,3",
+      selectedHex: state.selectedHex || "3,3",
+      hexes: JSON.parse(JSON.stringify(state.hexes)),
+      activeMyths: JSON.parse(JSON.stringify(state.activeMyths || []))
+    });
+  }
+}
+
+function syncCurrentRealmToSavedList() {
+  ensureSavedRealmsInitialized();
+  if (!state.hexes || Object.keys(state.hexes).length === 0) return;
+  let idx = state.savedRealms.findIndex(r => r.id === state.activeRealmId);
+  const snapshot = {
+    id: state.activeRealmId,
+    name: state.realmName || "Unnamed Realm",
+    updatedAt: Date.now(),
+    companyHex: state.companyHex || "3,3",
+    selectedHex: state.selectedHex || "3,3",
+    hexes: JSON.parse(JSON.stringify(state.hexes)),
+    activeMyths: JSON.parse(JSON.stringify(state.activeMyths || []))
+  };
+  if (idx >= 0) {
+    state.savedRealms[idx] = snapshot;
+  } else {
+    state.savedRealms.push(snapshot);
+  }
+}
+
+function renderSavedRealmsBar() {
+  ensureSavedRealmsInitialized();
+  const tabsEl = document.getElementById("saved-realms-tabs");
+  const nameIn = document.getElementById("active-realm-name-input");
+  if (nameIn && document.activeElement !== nameIn) {
+    nameIn.value = state.realmName || "";
+  }
+  if (!tabsEl) return;
+
+  tabsEl.innerHTML = state.savedRealms.map(rm => {
+    const isActive = rm.id === state.activeRealmId;
+    const hCount = countRealmHoldings(isActive ? state.hexes : rm.hexes);
+    const canDelete = state.savedRealms.length > 1;
+    return `
+      <div class="saved-realm-tab ${isActive ? 'active' : ''}" onclick="switchActiveRealm('${rm.id}')" title="Switch to ${rm.name} (${hCount} Holdings)">
+        <span>${isActive ? '🗺️' : '📁'} ${rm.name}</span>
+        <span style="font-size:0.7rem;opacity:0.8;">(${hCount}🏰)</span>
+        ${canDelete ? `<span class="tab-close-x" onclick="event.stopPropagation();deleteSavedRealm('${rm.id}')" title="Delete this saved Realm">✕</span>` : ""}
+      </div>
+    `;
+  }).join("");
+}
+
+function renderSavedRealmsModalList() {
+  ensureSavedRealmsInitialized();
+  const listEl = document.getElementById("saved-realms-modal-list");
+  if (!listEl) return;
+
+  listEl.innerHTML = state.savedRealms.map(rm => {
+    const isActive = rm.id === state.activeRealmId;
+    const hexesRef = isActive ? state.hexes : rm.hexes;
+    const mythsRef = isActive ? state.activeMyths : rm.activeMyths;
+    const hCount = countRealmHoldings(hexesRef);
+    const resolvedCount = (mythsRef || []).filter(m => m && m.resolved).length;
+    const canDelete = state.savedRealms.length > 1;
+    return `
+      <div class="saved-realm-row ${isActive ? 'active' : ''}">
+        <div>
+          <div style="font-weight:700;font-size:0.92rem;display:flex;align-items:center;gap:0.4rem;">
+            <span>${isActive ? '🟢 Active:' : '🗺️'} ${rm.name}</span>
+          </div>
+          <div style="font-size:0.78rem;color:var(--text-muted);margin-top:0.1rem;">
+            <strong>${hCount} Holdings</strong> • 6 Myths (${resolvedCount}/6 Resolved) • Company at ${formatHexCoord(rm.companyHex || "3,3")}
+          </div>
+        </div>
+        <div style="display:flex;gap:0.35rem;flex-wrap:wrap;">
+          ${!isActive ? `<button class="btn btn-sm btn-primary" onclick="switchActiveRealm('${rm.id}');closeNewRealmModal()">📂 Open Map</button>` : `<span class="btn btn-sm" style="pointer-events:none;opacity:0.75;">✓ Currently Open</span>`}
+          <button class="btn btn-sm" onclick="promptRenameSavedRealm('${rm.id}')">✏️ Rename</button>
+          <button class="btn btn-sm" onclick="duplicateSavedRealm('${rm.id}')">📋 Duplicate</button>
+          ${canDelete ? `<button class="btn btn-sm btn-danger" onclick="deleteSavedRealm('${rm.id}')">🗑️ Delete</button>` : ""}
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+function switchActiveRealm(realmId) {
+  ensureSavedRealmsInitialized();
+  if (realmId === state.activeRealmId) return;
+  syncCurrentRealmToSavedList();
+
+  const target = state.savedRealms.find(r => r.id === realmId);
+  if (!target) return;
+
+  state.activeRealmId = target.id;
+  state.realmName = target.name || "Unnamed Realm";
+  state.companyHex = target.companyHex || "3,3";
+  state.selectedHex = target.selectedHex || state.companyHex || "3,3";
+  state.hexes = JSON.parse(JSON.stringify(target.hexes || {}));
+  state.activeMyths = JSON.parse(JSON.stringify(target.activeMyths || []));
+
+  renderSavedRealmsBar();
+  renderSavedRealmsModalList();
+  renderRealmMap();
+  renderSelectedHexInspector();
+  renderActiveMyths();
+  saveState();
+  setBanner(`Opened Realm: <strong>${state.realmName}</strong>`);
+}
+
+function renameActiveRealm(newName) {
+  state.realmName = (newName || "").trim() || "Unnamed Realm";
+  const cur = state.savedRealms.find(r => r.id === state.activeRealmId);
+  if (cur) cur.name = state.realmName;
+  renderSavedRealmsBar();
+  saveState();
+}
+
+function rollRandomActiveRealmName() {
+  const newName = rollRandomRealmName();
+  state.realmName = newName;
+  const nameIn = document.getElementById("active-realm-name-input");
+  if (nameIn) nameIn.value = newName;
+  renameActiveRealm(newName);
+  setBanner(`Renamed Realm to <strong>${newName}</strong>`);
+}
+
+function promptRenameSavedRealm(realmId) {
+  const target = state.savedRealms.find(r => r.id === realmId);
+  if (!target) return;
+  const entered = window.prompt("Enter a new name for this Realm Map:", target.name);
+  if (entered && entered.trim()) {
+    target.name = entered.trim();
+    if (target.id === state.activeRealmId) {
+      state.realmName = target.name;
+    }
+    renderSavedRealmsBar();
+    renderSavedRealmsModalList();
+    saveState();
+  }
+}
+
+function duplicateSavedRealm(realmId) {
+  syncCurrentRealmToSavedList();
+  const src = state.savedRealms.find(r => r.id === realmId);
+  if (!src) return;
+  const newId = "realm_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
+  const copy = {
+    id: newId,
+    name: `${src.name} (Copy)`,
+    updatedAt: Date.now(),
+    companyHex: src.companyHex || "3,3",
+    selectedHex: src.selectedHex || "3,3",
+    hexes: JSON.parse(JSON.stringify(src.hexes)),
+    activeMyths: JSON.parse(JSON.stringify(src.activeMyths))
+  };
+  state.savedRealms.push(copy);
+  renderSavedRealmsBar();
+  renderSavedRealmsModalList();
+  saveState();
+  setBanner(`Duplicated <strong>${src.name}</strong>`);
+}
+
+function deleteSavedRealm(realmId) {
+  ensureSavedRealmsInitialized();
+  if (state.savedRealms.length <= 1) {
+    setBanner("Cannot delete the only saved Realm map");
+    return;
+  }
+  const idx = state.savedRealms.findIndex(r => r.id === realmId);
+  if (idx < 0) return;
+  const removedName = state.savedRealms[idx].name;
+  state.savedRealms.splice(idx, 1);
+
+  if (state.activeRealmId === realmId) {
+    const fallback = state.savedRealms[Math.max(0, idx - 1)];
+    state.activeRealmId = fallback.id;
+    state.realmName = fallback.name;
+    state.companyHex = fallback.companyHex || "3,3";
+    state.selectedHex = fallback.selectedHex || "3,3";
+    state.hexes = JSON.parse(JSON.stringify(fallback.hexes));
+    state.activeMyths = JSON.parse(JSON.stringify(fallback.activeMyths));
+    renderRealmMap();
+    renderSelectedHexInspector();
+    renderActiveMyths();
+  }
+  renderSavedRealmsBar();
+  renderSavedRealmsModalList();
+  saveState();
+  setBanner(`Removed saved map: ${removedName}`);
+}
+
 function openNewRealmModal() {
+  syncCurrentRealmToSavedList();
+  renderSavedRealmsModalList();
   const modal = document.getElementById("new-realm-modal");
   if (modal) modal.classList.add("open");
 }
@@ -182,13 +406,40 @@ function closeNewRealmModal(event) {
   if (modal) modal.classList.remove("open");
 }
 
-function confirmGenerateNewRealm() {
+function getNewRealmModalOptions() {
+  const nameIn = document.getElementById("new-realm-name-input");
+  const holdSel = document.getElementById("new-realm-holdings-select");
+  const customName = nameIn && nameIn.value.trim() ? nameIn.value.trim() : "";
+  const holdVal = holdSel ? holdSel.value : "random";
+  if (nameIn) nameIn.value = "";
+  return {
+    customName,
+    holdingsCount: holdVal === "random" ? "random" : Number(holdVal)
+  };
+}
+
+function createAndSwitchNewRealm() {
+  syncCurrentRealmToSavedList();
+  const opts = getNewRealmModalOptions();
+  const newId = "realm_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
+  state.activeRealmId = newId;
+  state.realmName = opts.customName || rollRandomRealmName();
+  generateStarterRealm({ holdingsCount: opts.holdingsCount, keepRealmName: true });
   closeNewRealmModal();
-  generateStarterRealm();
+}
+
+function confirmGenerateNewRealm() {
+  const opts = getNewRealmModalOptions();
+  if (opts.customName) {
+    state.realmName = opts.customName;
+  }
+  closeNewRealmModal();
+  generateStarterRealm({ holdingsCount: opts.holdingsCount, keepRealmName: true });
 }
 
 function saveState() {
   try {
+    syncCurrentRealmToSavedList();
     state.updatedAt = Date.now();
     const payload = JSON.stringify(state);
     localStorage.setItem(STORAGE_KEY, payload);
@@ -1420,7 +1671,60 @@ function generateLandmarkNote(lmType, mythIndexHint) {
   return `${lmPrompt} (${refMyth ? refMyth.name : "Wilds"})`;
 }
 
-function generateStarterRealm() {
+// Pick 3 to 6 well-dispersed Holding hexes across the 12x12 map
+function pickDispersedHoldingHexes(count) {
+  const placed = [];
+  for (let i = 0; i < count; i++) {
+    let candidates = [];
+    for (const minDist of [4, 3, 2]) {
+      candidates = [];
+      for (let r = 1; r <= 10; r++) {
+        for (let c = 1; c <= 10; c++) {
+          const key = `${r},${c}`;
+          const hex = state.hexes[key];
+          if (!hex || hex.terrain === "Lake") continue;
+          if (placed.includes(key)) continue;
+
+          // Keep Seat of Power (i === 0) reasonably central/accessible
+          if (i === 0 && (r < 2 || r > 9 || c < 2 || c > 9)) continue;
+
+          let nearest = 99;
+          for (const pk of placed) {
+            const d = getHexDistance(key, pk);
+            if (d < nearest) nearest = d;
+          }
+          if (placed.length > 0 && nearest < minDist) continue;
+
+          const weight = placed.length > 0 ? Math.pow(nearest, 2.6) : 1.0;
+          candidates.push({ key, weight });
+        }
+      }
+      if (candidates.length > 0) break;
+    }
+
+    const totalW = candidates.reduce((s, item) => s + item.weight, 0);
+    let pick = Math.random() * totalW;
+    let chosenKey = candidates[candidates.length - 1].key;
+    for (const item of candidates) {
+      pick -= item.weight;
+      if (pick <= 0) {
+        chosenKey = item.key;
+        break;
+      }
+    }
+    placed.push(chosenKey);
+  }
+  return placed;
+}
+
+function generateStarterRealm(options) {
+  const opts = options || {};
+  if (!opts.keepRealmName || !state.realmName) {
+    state.realmName = rollRandomRealmName();
+  }
+  if (!state.activeRealmId) {
+    state.activeRealmId = "realm_" + Date.now();
+  }
   state.hexes = {};
   const allTerrains = [
     "Marsh", "Heath", "Crag", "Peaks", "Forest", "Valley",
@@ -1475,15 +1779,19 @@ function generateStarterRealm() {
   // Navigable Branching River System (Main River + 1–2 Tributary Branches entering/leaving Hex Sides & Corners)
   generateBranchingRiverNetwork();
 
-  // 4 Holdings placed in the 4 quadrants with random jitter so they are well-spaced but vary each Realm
-  const randInRange = (min, max) => min + Math.floor(Math.random() * (max - min + 1));
-  const holdingTypes = ["Fortress", "Tower", "Town"].sort(() => Math.random() - 0.5);
-  const holdingConfigs = [
-    { coord: `${randInRange(2, 4)},${randInRange(2, 4)}`, type: "Seat of Power" },
-    { coord: `${randInRange(2, 4)},${randInRange(7, 9)}`, type: holdingTypes[0] },
-    { coord: `${randInRange(7, 9)},${randInRange(2, 4)}`, type: holdingTypes[1] },
-    { coord: `${randInRange(7, 9)},${randInRange(7, 9)}`, type: holdingTypes[2] }
-  ];
+  // Variable 3 to 6 Holdings dispersed across the Realm
+  const numHoldings = (typeof opts.holdingsCount === "number" && opts.holdingsCount >= 3 && opts.holdingsCount <= 6)
+    ? opts.holdingsCount
+    : (3 + Math.floor(Math.random() * 4)); // 3, 4, 5, or 6 Holdings
+  const holdingCoords = pickDispersedHoldingHexes(numHoldings);
+  const baseTypes = ["Fortress", "Town", "Tower"].sort(() => Math.random() - 0.5);
+  const extraTypes = ["Castle", "Town", "Fortress", "Tower"].sort(() => Math.random() - 0.5);
+  const secondaryTypes = [...baseTypes, ...extraTypes];
+
+  const holdingConfigs = holdingCoords.map((coord, idx) => ({
+    coord,
+    type: idx === 0 ? "Seat of Power" : secondaryTypes[idx - 1]
+  }));
   const holdingSpark = window.MB_DATA.sparkTables.Civilisation.Holding.rows;
   holdingConfigs.forEach(cfg => {
     const h = state.hexes[cfg.coord];
@@ -1499,7 +1807,6 @@ function generateStarterRealm() {
   state.selectedHex = holdingConfigs[0].coord;
 
   // 6 Active Myths dispersed randomly across the Realm (repelled from Holdings and from each other)
-  const holdingCoords = holdingConfigs.map(cfg => cfg.coord);
   const mythHexCoords = pickDispersedMythHexes(holdingCoords);
 
   const chosenMyths = [];
@@ -1551,11 +1858,13 @@ function generateStarterRealm() {
     }
   });
 
+  syncCurrentRealmToSavedList();
+  renderSavedRealmsBar();
   renderRealmMap();
   renderSelectedHexInspector();
   renderActiveMyths();
   saveState();
-  setBanner("Generated new 12×12 Blank Realm Map");
+  setBanner(`Generated <strong>${state.realmName}</strong> (${numHoldings} Holdings, 6 Myths)`);
 }
 
 function togglePlayerView() {
@@ -1862,6 +2171,7 @@ function buildRealmSvgInnerMarkup(forcePlayerClean) {
 }
 
 function renderRealmMap() {
+  renderSavedRealmsBar();
   const svg = document.getElementById("hex-map-svg");
   if (!svg) return;
   svg.innerHTML = buildRealmSvgInnerMarkup(false);

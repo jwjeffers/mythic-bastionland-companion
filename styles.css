@@ -1187,3 +1187,93 @@ input:focus, select:focus, textarea:focus {
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
 }
+
+/* ==========================================
+   MULTI-REALM / SAVED REALMS SWITCHER BAR
+   ========================================== */
+.saved-realms-bar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.65rem;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.45rem 0.65rem;
+  margin-bottom: 0.85rem;
+}
+
+.saved-realms-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+  flex: 1;
+}
+
+.saved-realm-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.32rem 0.65rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.saved-realm-tab:hover {
+  background: var(--bg-hover);
+}
+
+.saved-realm-tab.active {
+  background: var(--accent);
+  color: var(--accent-fg);
+  border-color: var(--accent);
+}
+
+.saved-realm-tab .tab-close-x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  font-size: 0.68rem;
+  opacity: 0.75;
+  margin-left: 0.15rem;
+}
+
+.saved-realm-tab .tab-close-x:hover {
+  opacity: 1;
+  background: rgba(239, 68, 68, 0.25);
+}
+
+.active-realm-name-box {
+  display: flex;
+  align-items: center;
+  gap: 0.38rem;
+  flex-wrap: wrap;
+}
+
+.saved-realm-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.6rem 0.75rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+}
+
+.saved-realm-row.active {
+  border: 2px solid var(--accent);
+  background: var(--bg-subtle);
+}

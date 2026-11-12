@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="Bastionland Ref" />
   <title>Mythic Bastionland — Referee Companion</title>
-  <link rel="stylesheet" href="styles.css?v=17" />
+  <link rel="stylesheet" href="styles.css?v=19" />
 </head>
 <body>
 
@@ -389,15 +389,26 @@
       <div class="card">
         <div class="card-header">
           <div>
-            <div class="card-title">Realm Hex Map & Active Myths (12×12 Blank Realm Sheet)</div>
+            <div class="card-title">Realm Hex Map &amp; Active Myths (12×12 Blank Realm Sheet)</div>
             <div style="font-size:0.78rem;color:var(--text-muted);">
-              Official <em>Mythic Bastionland Blank Realm.pdf</em> grid &amp; hand-drawn ink stamps • Scroll wheel / pinch to Zoom • Drag to Pan • Tap Hex to Select
+              Official <em>Mythic Bastionland Blank Realm.pdf</em> grid &amp; hand-drawn ink stamps • 3–6 Holdings • Tap Hex to Select
             </div>
           </div>
           <div style="display:flex;flex-wrap:wrap;gap:0.45rem;align-items:center;">
+            <button class="btn btn-sm" onclick="openNewRealmModal()" title="Open, Switch, Edit, or Create Realm Maps">🗺️ Saved Realms / New Map...</button>
             <button class="btn btn-primary btn-sm" onclick="printPlayerRealmPDF()" title="Print or Save Player-Safe Realm Map to PDF">🖨️ Print Player Map (PDF)</button>
-            <button class="btn btn-danger btn-sm" onclick="openNewRealmModal()">⚠️ New Realm...</button>
             <button id="toggle-player-view-btn" class="btn btn-sm" onclick="togglePlayerView()">Referee View</button>
+          </div>
+        </div>
+
+        <!-- Multi-Realm Switcher & Active Realm Editor Bar -->
+        <div class="saved-realms-bar">
+          <div class="saved-realms-tabs" id="saved-realms-tabs"></div>
+          <div class="active-realm-name-box">
+            <span style="font-size:0.74rem;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Active Realm:</span>
+            <input type="text" id="active-realm-name-input" oninput="renameActiveRealm(this.value)" placeholder="Realm Name..." style="width:175px;padding:0.25rem 0.5rem;font-size:0.84rem;font-weight:700;" />
+            <button class="btn btn-sm" onclick="rollRandomActiveRealmName()" title="Roll Random Realm Name">🎲</button>
+            <button class="btn btn-sm btn-primary" onclick="openNewRealmModal()" title="Create a New Realm or Manage Saved Realms">➕ New / Manage Maps</button>
           </div>
         </div>
 
@@ -661,21 +672,52 @@
   </div>
 
   <!-- ==========================================
-       NEW REALM CONFIRMATION WARNING MODAL
+       SAVED REALMS LIBRARY & NEW REALM GENERATOR MODAL
        ========================================== -->
   <div id="new-realm-modal" class="page-modal-backdrop" onclick="closeNewRealmModal(event)">
-    <div class="card" style="max-width:460px;width:100%;margin:auto;" onclick="event.stopPropagation()">
-      <div class="card-header">
-        <div class="card-title" style="color:var(--danger);">⚠️ Generate a New Realm?</div>
-        <button class="btn btn-sm" onclick="closeNewRealmModal()">✕</button>
+    <div class="card" style="max-width:740px;width:95vw;max-height:90vh;overflow-y:auto;margin:auto;padding:1.1rem 1.25rem;" onclick="event.stopPropagation()">
+      <div class="card-header" style="margin-bottom:0.85rem;">
+        <div>
+          <div class="card-title">🗺️ Saved Realm Maps &amp; New Realm Generator</div>
+          <div style="font-size:0.78rem;color:var(--text-muted);">
+            Open, switch, rename, duplicate, or create additional 12×12 Realm maps for distant lands (3–6 Holdings per Realm)
+          </div>
+        </div>
+        <button class="btn btn-sm" onclick="closeNewRealmModal()">✕ Close</button>
       </div>
-      <p style="font-size:0.9rem;color:var(--text-secondary);margin-bottom:1rem;">
-        Generating a new Realm will <strong>overwrite your current 12×12 Hex Map, Holdings, Landmarks, and reset your 6 Active Myths</strong>.
-      </p>
-      <div style="display:flex;flex-wrap:wrap;gap:0.5rem;justify-content:flex-end;">
-        <button class="btn btn-sm" onclick="closeNewRealmModal()">Cancel</button>
-        <button class="btn btn-sm" onclick="exportRealmJSON()">💾 Backup Current Realm First</button>
-        <button class="btn btn-sm btn-danger" onclick="confirmGenerateNewRealm()">⚠️ Yes, Generate New Realm</button>
+
+      <!-- Create / Generate New Realm Box -->
+      <div style="background:var(--bg-subtle);border:1px solid var(--border);border-radius:8px;padding:0.75rem 0.9rem;margin-bottom:1rem;">
+        <div style="font-weight:700;font-size:0.88rem;margin-bottom:0.5rem;">➕ Create or Reroll a 12×12 Realm Map</div>
+        <div style="display:flex;flex-wrap:wrap;gap:0.65rem;align-items:flex-end;">
+          <div style="flex:1;min-width:180px;">
+            <label style="font-size:0.72rem;font-weight:700;text-transform:uppercase;color:var(--text-muted);display:block;margin-bottom:0.2rem;">Realm Name (Optional)</label>
+            <input type="text" id="new-realm-name-input" placeholder="Leave blank for random Spark name..." style="width:100%;" />
+          </div>
+          <div>
+            <label style="font-size:0.72rem;font-weight:700;text-transform:uppercase;color:var(--text-muted);display:block;margin-bottom:0.2rem;">Holdings (3–6)</label>
+            <select id="new-realm-holdings-select">
+              <option value="random" selected>🎲 Random (3–6 Holdings)</option>
+              <option value="3">3 Holdings (Borderlands)</option>
+              <option value="4">4 Holdings (Standard)</option>
+              <option value="5">5 Holdings (Populous)</option>
+              <option value="6">6 Holdings (Crowded)</option>
+            </select>
+          </div>
+          <div style="display:flex;gap:0.4rem;flex-wrap:wrap;">
+            <button class="btn btn-sm btn-primary" onclick="createAndSwitchNewRealm()">➕ Add as New Saved Map</button>
+            <button class="btn btn-sm btn-danger" onclick="confirmGenerateNewRealm()" title="Overwrite the currently active map with a newly rolled map">🔄 Reroll Active Map</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Saved Realms List -->
+      <div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
+          <strong style="font-size:0.88rem;">📂 Your Saved Realm Maps</strong>
+          <button class="btn btn-sm" onclick="exportRealmJSON()">💾 Export All Maps (.json)</button>
+        </div>
+        <div id="saved-realms-modal-list" style="display:flex;flex-direction:column;gap:0.5rem;"></div>
       </div>
     </div>
   </div>
@@ -766,7 +808,7 @@
        ========================================== -->
   <div id="printable-player-sheet" class="printable-player-sheet" aria-hidden="true"></div>
 
-  <script src="data.js?v=18"></script>
-  <script src="app.js?v=18"></script>
+  <script src="data.js?v=19"></script>
+  <script src="app.js?v=19"></script>
 </body>
 </html>
