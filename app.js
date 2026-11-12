@@ -1104,6 +1104,206 @@ function handleHexTap(key) {
 }
 
 const HEX_SIDE_LABELS = ["N", "NE", "SE", "S", "SW", "NW"];
+const HEX_CORNER_LABELS = ["NW", "NE", "E", "SE", "SW", "W"];
+
+// Flat-top hex grid neighbor lookup for sideIdx 0..5 (N, NE, SE, S, SW, NW)
+function getHexNeighborInDir(r, c, sideIdx) {
+  const isOddCol = (c % 2) === 1; // 0-indexed odd columns (cols 2,4,6,8,10,12) are shifted down by +0.5 hex
+  let dr = 0;
+  let dc = 0;
+  if (sideIdx === 0) { dr = -1; dc = 0; }
+  else if (sideIdx === 1) { dr = isOddCol ? 0 : -1; dc = 1; }
+  else if (sideIdx === 2) { dr = isOddCol ? 1 : 0; dc = 1; }
+  else if (sideIdx === 3) { dr = 1; dc = 0; }
+  else if (sideIdx === 4) { dr = isOddCol ? 1 : 0; dc = -1; }
+  else if (sideIdx === 5) { dr = isOddCol ? 0 : -1; dc = -1; }
+  const nr = r + dr;
+  const nc = c + dc;
+  if (nr < 0 || nr >= 12 || nc < 0 || nc >= 12) return null;
+  return { r: nr, c: nc, key: `${nr},${nc}`, oppSide: (sideIdx + 3) % 6 };
+}
+
+function addRiverPort(hex, portId) {
+  if (!hex) return;
+  if (!Array.isArray(hex.riverPorts)) hex.riverPorts = [];
+  if (!hex.riverPorts.includes(portId)) {
+    hex.riverPorts.push(portId);
+  }
+}
+
+function removeRiverPort(hex, portId) {
+  if (!hex || !Array.isArray(hex.riverPorts)) return;
+  hex.riverPorts = hex.riverPorts.filter(p => p !== portId);
+}
+
+// Automatically infer river ports for hex (r,c) based on adjacent river/lake hexes & map borders
+function autoInferHexRiverPorts(r, c, syncNeighbors) {
+  const key = `${r},${c}`;
+  const hex = state.hexes[key];
+  if (!hex || !hex.river) return [];
+
+  // Keep any existing Corner ports ("C0".."C5") the user explicitly toggled
+  const existingCorners = Array.isArray(hex.riverPorts)
+    ? hex.riverPorts.filter(p => typeof p === "string" && p.startsWith("C"))
+    : [];
+
+  const ports = [...existingCorners];
+  for (let s = 0; s < 6; s++) {
+    const nb = getHexNeighborInDir(r, c, s);
+    if (nb) {
+      const nbHex = state.hexes[nb.key];
+      if (nbHex && (nbHex.river || nbHex.terrain === "Lake")) {
+        const pId = `S${s}`;
+        if (!ports.includes(pId)) ports.push(pId);
+        if (syncNeighbors && nbHex.river) {
+          addRiverPort(nbHex, `S${nb.oppSide}`);
+        }
+      }
+    }
+  }
+
+  // If on the outer border of the map, allow entry/exit through the border side
+  if (r === 0 && !ports.includes("S0")) ports.push("S0");
+  else if (r === 11 && !ports.includes("S3")) ports.push("S3");
+  else if (c === 0 && !ports.includes("S5")) ports.push("S5");
+  else if (c === 11 && !ports.includes("S2")) ports.push("S2");
+
+  // If still 0 ports (isolated interior hex), default to flowing N -> S ("S0", "S3")
+  if (ports.length === 0) {
+    ports.push("S0", "S3");
+  }
+
+  hex.riverPorts = ports;
+  return ports;
+}
+
+// Re-infer ports across all river hexes on the map (used when migrating old saves or after bulk changes)
+function rebuildAllRiverPortsFromNeighbors() {
+  for (let r = 0; r < 12; r++) {
+    for (let c = 0; c < 12; c++) {
+      const h = state.hexes[`${r},${c}`];
+      if (h && h.river) {
+        autoInferHexRiverPorts(r, c, false);
+      }
+    }
+  }
+}
+
+// Generate a natural branching river network (Main stem + 1–2 Tributary branches, using Sides & Corners)
+function generateBranchingRiverNetwork() {
+  for (let r = 0; r < 12; r++) {
+    for (let c = 0; c < 12; c++) {
+      const h = state.hexes[`${r},${c}`];
+      if (h) {
+        h.river = false;
+        h.riverPorts = [];
+      }
+    }
+  }
+
+  const mainSpine = [];
+  let rr = 0;
+  let rc = 2 + Math.floor(Math.random() * 4);
+  const startHex = state.hexes[`${rr},${rc}`];
+  if (startHex) {
+    startHex.river = true;
+    startHex.barrier = false;
+    startHex.barrierSides = [];
+    // Enter from North side (S0) or a northern corner (C0 / C1)
+    addRiverPort(startHex, Math.random() < 0.7 ? "S0" : (Math.random() < 0.5 ? "C0" : "C1"));
+    mainSpine.push({ r: rr, c: rc });
+  }
+
+  let steps = 0;
+  let lastDir = 3;
+  while (rr < 11 && steps < 24) {
+    steps++;
+    // Candidate downstream directions: 2 (SE), 3 (S), 4 (SW)
+    const dirPool = [3, 3, 2, 4];
+    if (rc <= 1) dirPool.push(2, 2);
+    if (rc >= 10) dirPool.push(4, 4);
+    // Avoid immediate zig-zag reversal between SE (2) and SW (4)
+    const filtered = dirPool.filter(d => !(lastDir === 2 && d === 4) && !(lastDir === 4 && d === 2));
+    const chosenDir = filtered[Math.floor(Math.random() * filtered.length)];
+    const nb = getHexNeighborInDir(rr, rc, chosenDir);
+    if (!nb) break;
+
+    const curHex = state.hexes[`${rr},${rc}`];
+    const nextHex = state.hexes[nb.key];
+    if (!nextHex) break;
+
+    addRiverPort(curHex, `S${chosenDir}`);
+    if (nextHex.terrain === "Lake") {
+      // River empties into the Lake!
+      break;
+    }
+
+    nextHex.river = true;
+    nextHex.barrier = false;
+    nextHex.barrierSides = [];
+    addRiverPort(nextHex, `S${nb.oppSide}`);
+
+    rr = nb.r;
+    rc = nb.c;
+    lastDir = chosenDir;
+    mainSpine.push({ r: rr, c: rc });
+
+    if (rr === 11 || rc === 0 || rc === 11) {
+      // Exit off the map edge via a Side or Corner
+      if (rr === 11) addRiverPort(nextHex, Math.random() < 0.75 ? "S3" : "C3");
+      else if (rc === 11) addRiverPort(nextHex, "S2");
+      else if (rc === 0) addRiverPort(nextHex, "S4");
+      break;
+    }
+  }
+
+  // Sprout 1 or 2 Tributary Branches off the main river spine
+  if (mainSpine.length >= 5) {
+    const branchCandidates = mainSpine.slice(2, mainSpine.length - 2);
+    const numBranches = 1 + (Math.random() < 0.65 ? 1 : 0);
+    for (let b = 0; b < numBranches && branchCandidates.length > 0; b++) {
+      const pickIdx = Math.floor(Math.random() * branchCandidates.length);
+      const fork = branchCandidates.splice(pickIdx, 1)[0];
+      // Pick an upland/lateral direction: 1 (NE), 5 (NW), 2 (SE), or 4 (SW)
+      const sideDirs = [1, 5, 2, 4].sort(() => Math.random() - 0.5);
+      let bDir = -1;
+      for (const sd of sideDirs) {
+        const nb = getHexNeighborInDir(fork.r, fork.c, sd);
+        if (nb && state.hexes[nb.key] && !state.hexes[nb.key].river && state.hexes[nb.key].terrain !== "Lake") {
+          bDir = sd;
+          break;
+        }
+      }
+      if (bDir === -1) continue;
+
+      let br = fork.r;
+      let bc = fork.c;
+      const branchLen = 2 + Math.floor(Math.random() * 2); // 2 to 3 hexes long
+      for (let step = 0; step < branchLen; step++) {
+        const nb = getHexNeighborInDir(br, bc, bDir);
+        if (!nb) break;
+        const fromHex = state.hexes[`${br},${bc}`];
+        const toHex = state.hexes[nb.key];
+        if (!toHex || toHex.river || toHex.terrain === "Lake") break;
+
+        addRiverPort(fromHex, `S${bDir}`);
+        toHex.river = true;
+        toHex.barrier = false;
+        toHex.barrierSides = [];
+        addRiverPort(toHex, `S${nb.oppSide}`);
+
+        br = nb.r;
+        bc = nb.c;
+
+        // If this is the headwater tip of the branch, optionally give it a mountain/hill Corner source
+        if (step === branchLen - 1 && Math.random() < 0.55) {
+          const cornerChoice = bDir <= 2 ? "C1" : "C0";
+          addRiverPort(toHex, cornerChoice);
+        }
+      }
+    }
+  }
+}
 
 // Weighted spatial dispersion for 6 Myth locations:
 // - Avoids Holdings (min distance >= 2, strongly weighted toward larger distance from nearest Holding)
@@ -1254,6 +1454,7 @@ function generateStarterRealm() {
         mythSlot: "",
         label: "",
         river: false,
+        riverPorts: [],
         barrier: hasBarrier,
         barrierSides: hasBarrier ? rollRandomBarrierSides() : []
       };
@@ -1271,30 +1472,8 @@ function generateStarterRealm() {
     }
   });
 
-  // Navigable River passing through the Realm from North-West to South/South-East
-  let rr = 0;
-  let rc = 2 + Math.floor(Math.random() * 3);
-  while (rr < 12 && rc < 12) {
-    const h = state.hexes[`${rr},${rc}`];
-    if (h) {
-      h.river = true;
-      h.barrier = false;
-      h.barrierSides = [];
-    }
-    if (rr === 11) break;
-    const stepRoll = Math.random();
-    if (stepRoll < 0.58) {
-      rr++;
-    } else if (stepRoll < 0.82 && rc < 10) {
-      rc++;
-      if (Math.random() < 0.5 && rr < 11) rr++;
-    } else if (rc > 1) {
-      rc--;
-      rr++;
-    } else {
-      rr++;
-    }
-  }
+  // Navigable Branching River System (Main River + 1–2 Tributary Branches entering/leaving Hex Sides & Corners)
+  generateBranchingRiverNetwork();
 
   // 4 Holdings placed in the 4 quadrants with random jitter so they are well-spaced but vary each Realm
   const randInRange = (min, max) => min + Math.floor(Math.random() * (max - min + 1));
@@ -1387,23 +1566,200 @@ function togglePlayerView() {
   saveState();
 }
 
-// Convert array of {x, y} points into a smooth Catmull-Rom Cubic Bezier SVG path
-function buildCatmullRomSvgPath(pts) {
-  if (!pts || pts.length === 0) return "";
-  if (pts.length === 1) return `M ${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(1)}`;
-  let d = `M ${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(1)}`;
-  for (let i = 0; i < pts.length - 1; i++) {
-    const p0 = pts[Math.max(0, i - 1)];
-    const p1 = pts[i];
-    const p2 = pts[i + 1];
-    const p3 = pts[Math.min(pts.length - 1, i + 2)];
-    const cp1x = p1.x + (p2.x - p0.x) / 6;
-    const cp1y = p1.y + (p2.y - p0.y) / 6;
-    const cp2x = p2.x - (p3.x - p1.x) / 6;
-    const cp2y = p2.y - (p3.y - p1.y) / 6;
-    d += ` C ${cp1x.toFixed(1)} ${cp1y.toFixed(1)}, ${cp2x.toFixed(1)} ${cp2y.toFixed(1)}, ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`;
+// Compute exact port coordinate & inward tangent vector for Side ("S0".."S5") or Corner ("C0".."C5")
+function getHexPortGeometry(r, c, box, portId) {
+  if (!portId || typeof portId !== "string") return null;
+  const type = portId[0];
+  const idx = Number(portId.slice(1)) % 6;
+  if (isNaN(idx)) return null;
+
+  if (type === "C") {
+    const v = box.verts[idx];
+    const dx = box.cx - v[0];
+    const dy = box.cy - v[1];
+    const len = Math.hypot(dx, dy) || 1;
+    return {
+      id: portId,
+      type: "C",
+      idx,
+      x: v[0],
+      y: v[1],
+      tx: dx / len,
+      ty: dy / len
+    };
   }
-  return d;
+
+  // Side port "S0".."S5"
+  const vA = box.verts[idx];
+  const vB = box.verts[(idx + 1) % 6];
+  let px = (vA[0] + vB[0]) * 0.5;
+  let py = (vA[1] + vB[1]) * 0.5;
+
+  // Average shared edge midpoint with neighbor so both hexes meet at the exact sub-pixel point
+  const nb = getHexNeighborInDir(r, c, idx);
+  if (nb) {
+    const nbBox = getBlankRealmHexBox(nb.r, nb.c);
+    const nvA = nbBox.verts[nb.oppSide];
+    const nvB = nbBox.verts[(nb.oppSide + 1) % 6];
+    const npx = (nvA[0] + nvB[0]) * 0.5;
+    const npy = (nvA[1] + nvB[1]) * 0.5;
+    px = (px + npx) * 0.5;
+    py = (py + npy) * 0.5;
+  }
+
+  // Canonical inward normal for flat-top hex sides (0=N, 1=NE, 2=SE, 3=S, 4=SW, 5=NW)
+  const outDeg = -90 + idx * 60;
+  const inRad = ((outDeg + 180) * Math.PI) / 180;
+  return {
+    id: portId,
+    type: "S",
+    idx,
+    x: px,
+    y: py,
+    tx: Math.cos(inRad),
+    ty: Math.sin(inRad)
+  };
+}
+
+// Build smooth, branching, hand-inked SVG river layer across all river hexes
+function buildNaturalRiverSvgLayer() {
+  const mainPaths = [];
+  const branchPaths = [];
+  const springPools = [];
+
+  for (let r = 0; r < 12; r++) {
+    for (let c = 0; c < 12; c++) {
+      const key = `${r},${c}`;
+      const hex = state.hexes[key];
+      if (!hex || !hex.river) continue;
+
+      if (!Array.isArray(hex.riverPorts) || hex.riverPorts.length === 0) {
+        autoInferHexRiverPorts(r, c, false);
+      }
+
+      const box = getBlankRealmHexBox(r, c);
+      const portObjs = (hex.riverPorts || [])
+        .map(pid => getHexPortGeometry(r, c, box, pid))
+        .filter(Boolean);
+
+      if (portObjs.length === 0) continue;
+
+      // Deterministic subtle meander per hex so straight stretches look naturally hand-drawn
+      const seedVal = ((r * 31 + c * 17) % 7) - 3; // -3..+3
+      const meander = seedVal * 0.85;
+
+      if (portObjs.length === 1) {
+        // Headwater source / branch tip tapering toward hex center
+        const p0 = portObjs[0];
+        const endX = box.cx + (-p0.ty) * meander * 0.8;
+        const endY = box.cy + (p0.tx) * meander * 0.8;
+        const cp1x = p0.x + p0.tx * 9.5;
+        const cp1y = p0.y + p0.ty * 9.5;
+        const cp2x = (p0.x + endX) * 0.5 + (-p0.ty) * meander;
+        const cp2y = (p0.y + endY) * 0.5 + (p0.tx) * meander;
+        branchPaths.push(`M ${p0.x.toFixed(2)} ${p0.y.toFixed(2)} C ${cp1x.toFixed(2)} ${cp1y.toFixed(2)}, ${cp2x.toFixed(2)} ${cp2y.toFixed(2)}, ${endX.toFixed(2)} ${endY.toFixed(2)}`);
+        springPools.push({ x: endX, y: endY });
+      } else {
+        // Pick the two ports with the widest separation as the primary continuous stem
+        let bestI = 0;
+        let bestJ = 1;
+        let maxDist = -1;
+        for (let i = 0; i < portObjs.length; i++) {
+          for (let j = i + 1; j < portObjs.length; j++) {
+            const d = Math.hypot(portObjs[j].x - portObjs[i].x, portObjs[j].y - portObjs[i].y);
+            if (d > maxDist) {
+              maxDist = d;
+              bestI = i;
+              bestJ = j;
+            }
+          }
+        }
+
+        const pA = portObjs[bestI];
+        const pB = portObjs[bestJ];
+        const chordX = pB.x - pA.x;
+        const chordY = pB.y - pA.y;
+        const chordLen = Math.hypot(chordX, chordY) || 1;
+        const perpX = -chordY / chordLen;
+        const perpY = chordX / chordLen;
+        const hLen = Math.min(16.0, chordLen * 0.42);
+
+        const cp1x = pA.x + pA.tx * hLen + perpX * meander;
+        const cp1y = pA.y + pA.ty * hLen + perpY * meander;
+        const cp2x = pB.x + pB.tx * hLen - perpX * meander;
+        const cp2y = pB.y + pB.ty * hLen - perpY * meander;
+
+        mainPaths.push(`M ${pA.x.toFixed(2)} ${pA.y.toFixed(2)} C ${cp1x.toFixed(2)} ${cp1y.toFixed(2)}, ${cp2x.toFixed(2)} ${cp2y.toFixed(2)}, ${pB.x.toFixed(2)} ${pB.y.toFixed(2)}`);
+
+        // If 3+ ports (a river fork / branch confluence), join each additional branch smoothly into the stem midpoint
+        if (portObjs.length >= 3) {
+          const mx = 0.125 * pA.x + 0.375 * cp1x + 0.375 * cp2x + 0.125 * pB.x;
+          const my = 0.125 * pA.y + 0.375 * cp1y + 0.375 * cp2y + 0.125 * pB.y;
+          // Tangent of cubic bezier at t = 0.5
+          const tdX = 0.75 * (cp1x - pA.x) + 1.5 * (cp2x - cp1x) + 0.75 * (pB.x - cp2x);
+          const tdY = 0.75 * (cp1y - pA.y) + 1.5 * (cp2y - cp1y) + 0.75 * (pB.y - cp2y);
+          const tdLen = Math.hypot(tdX, tdY) || 1;
+          const mtx = tdX / tdLen;
+          const mty = tdY / tdLen;
+
+          for (let k = 0; k < portObjs.length; k++) {
+            if (k === bestI || k === bestJ) continue;
+            const pBr = portObjs[k];
+            const bDist = Math.hypot(mx - pBr.x, my - pBr.y) || 1;
+            const bLen = Math.min(12.5, bDist * 0.44);
+            const bcp1x = pBr.x + pBr.tx * bLen;
+            const bcp1y = pBr.y + pBr.ty * bLen;
+            // Blend into the main stem tangent in the direction facing pBr
+            const dot = (pBr.x - mx) * mtx + (pBr.y - my) * mty;
+            const sign = dot >= 0 ? 1 : -1;
+            const bcp2x = mx + mtx * sign * (bLen * 0.55);
+            const bcp2y = my + mty * sign * (bLen * 0.55);
+            branchPaths.push(`M ${pBr.x.toFixed(2)} ${pBr.y.toFixed(2)} C ${bcp1x.toFixed(2)} ${bcp1y.toFixed(2)}, ${bcp2x.toFixed(2)} ${bcp2y.toFixed(2)}, ${mx.toFixed(2)} ${my.toFixed(2)}`);
+          }
+        }
+      }
+    }
+  }
+
+  if (mainPaths.length === 0 && branchPaths.length === 0) return "";
+
+  const mainD = mainPaths.join(" ");
+  const branchD = branchPaths.join(" ");
+
+  const outerWash = "#cbc9c2";
+  const bankGray = "#84848c";
+  const currentGray = "#96969e";
+
+  const poolsMarkup = springPools.map(sp =>
+    `<circle cx="${sp.x.toFixed(2)}" cy="${sp.y.toFixed(2)}" r="2.8" fill="#ffffff" stroke="${bankGray}" stroke-width="1.2" />`
+  ).join("");
+
+  return `
+    <defs>
+      <filter id="mb-river-organic" x="-8%" y="-8%" width="116%" height="116%">
+        <feTurbulence type="fractalNoise" baseFrequency="0.06" numOctaves="3" seed="11" result="noise" />
+        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.45" xChannelSelector="R" yChannelSelector="G" />
+      </filter>
+    </defs>
+    <g filter="url(#mb-river-organic)" pointer-events="none">
+      <!-- 1. Soft Outer Riverbank Wash -->
+      ${mainD ? `<path d="${mainD}" fill="none" stroke="${outerWash}" stroke-width="9.4" stroke-linecap="round" stroke-linejoin="round" opacity="0.55" />` : ""}
+      ${branchD ? `<path d="${branchD}" fill="none" stroke="${outerWash}" stroke-width="6.8" stroke-linecap="round" stroke-linejoin="round" opacity="0.55" />` : ""}
+
+      <!-- 2. Gray Ink Riverbanks (Matching Gray Terrain Tiles) -->
+      ${mainD ? `<path d="${mainD}" fill="none" stroke="${bankGray}" stroke-width="7.2" stroke-linecap="round" stroke-linejoin="round" />` : ""}
+      ${branchD ? `<path d="${branchD}" fill="none" stroke="${bankGray}" stroke-width="5.2" stroke-linecap="round" stroke-linejoin="round" />` : ""}
+
+      <!-- 3. Clean White Water Channel Interior (Fuses All Branches & Hex Borders Seamlessly) -->
+      ${mainD ? `<path d="${mainD}" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" />` : ""}
+      ${branchD ? `<path d="${branchD}" fill="none" stroke="#ffffff" stroke-width="3.0" stroke-linecap="round" stroke-linejoin="round" />` : ""}
+
+      <!-- 4. Natural Flowing Water Current Ripples Along the River Curve -->
+      ${mainD ? `<path d="${mainD}" fill="none" stroke="${currentGray}" stroke-width="0.65" stroke-dasharray="4.2, 3.4, 1.8, 4.4" stroke-linecap="round" />` : ""}
+      ${branchD ? `<path d="${branchD}" fill="none" stroke="${currentGray}" stroke-width="0.55" stroke-dasharray="3.2, 3.0, 1.4, 3.6" stroke-linecap="round" />` : ""}
+      ${poolsMarkup}
+    </g>
+  `;
 }
 
 function buildRealmSvgInnerMarkup(forcePlayerClean) {
@@ -1434,12 +1790,7 @@ function buildRealmSvgInnerMarkup(forcePlayerClean) {
         terrainLayer += `<image href="${tStamp}" x="${(box.x0 + 1.2).toFixed(2)}" y="${(box.y0 + 1.0).toFixed(2)}" width="${(box.w - 2.4).toFixed(2)}" height="${(box.h - 2.0).toFixed(2)}" opacity="${tOpacity}" preserveAspectRatio="xMidYMid meet" pointer-events="none" />`;
       }
 
-      // 2. Collect River Waypoints
-      if (hex.river) {
-        riverPts.push({ r, c, x: box.cx, y: box.cy });
-      }
-
-      // 3. Red-Ink Barrier Hex Edges (1-6 bell-curve sides of the hex, Referee View only)
+      // 2. Red-Ink Barrier Hex Edges (1-6 bell-curve sides of the hex, Referee View only)
       if (!hideSecrets && hex.barrier) {
         if (!Array.isArray(hex.barrierSides) || hex.barrierSides.length === 0) {
           hex.barrierSides = rollRandomBarrierSides();
@@ -1497,41 +1848,7 @@ function buildRealmSvgInnerMarkup(forcePlayerClean) {
     }
   }
 
-  // Build Hand-Inked River (Twin gray banks + white water channel + gray water ripples, matching gray terrain tiles)
-  const riverStrokeGray = "#8e8e93";
-  let riverLayer = "";
-  if (riverPts.length >= 2) {
-    riverPts.sort((a, b) => (a.r * 1.2 + a.c * 0.4) - (b.r * 1.2 + b.c * 0.4));
-    const pathPts = riverPts.map(p => ({ x: p.x, y: p.y }));
-    if (riverPts[0].r === 0) {
-      pathPts.unshift({ x: riverPts[0].x - 4, y: riverPts[0].y - 17 });
-    }
-    const lastPt = riverPts[riverPts.length - 1];
-    if (lastPt.r === 11 || lastPt.c === 11) {
-      pathPts.push({ x: lastPt.x + 5, y: lastPt.y + 17 });
-    }
-    const d = buildCatmullRomSvgPath(pathPts);
-    const ripples = riverPts.map(p => `
-      <line x1="${(p.x - 2.6).toFixed(1)}" y1="${(p.y - 1.5).toFixed(1)}" x2="${(p.x + 2.6).toFixed(1)}" y2="${(p.y - 1.5).toFixed(1)}" stroke="${riverStrokeGray}" stroke-width="0.75" stroke-linecap="round" />
-      <line x1="${(p.x - 1.8).toFixed(1)}" y1="${(p.y + 1.8).toFixed(1)}" x2="${(p.x + 2.2).toFixed(1)}" y2="${(p.y + 1.8).toFixed(1)}" stroke="${riverStrokeGray}" stroke-width="0.75" stroke-linecap="round" />
-    `).join("");
-
-    riverLayer = `
-      <g pointer-events="none">
-        <path d="${d}" fill="none" stroke="${riverStrokeGray}" stroke-width="10.2" stroke-linecap="round" stroke-linejoin="round" />
-        <path d="${d}" fill="none" stroke="#ffffff" stroke-width="6.4" stroke-linecap="round" stroke-linejoin="round" />
-        ${ripples}
-      </g>
-    `;
-  } else if (riverPts.length === 1) {
-    const p = riverPts[0];
-    riverLayer = `
-      <g pointer-events="none">
-        <ellipse cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" rx="9" ry="5.5" fill="#ffffff" stroke="${riverStrokeGray}" stroke-width="1.8" />
-        <line x1="${(p.x - 4).toFixed(1)}" y1="${p.y.toFixed(1)}" x2="${(p.x + 4).toFixed(1)}" y2="${p.y.toFixed(1)}" stroke="${riverStrokeGray}" stroke-width="0.8" />
-      </g>
-    `;
-  }
+  const riverLayer = buildNaturalRiverSvgLayer();
 
   return `
     <image href="stamps/blank_realm_grid.png" x="10" y="10" width="438" height="492" preserveAspectRatio="none" pointer-events="none" />
@@ -1744,6 +2061,45 @@ function renderSelectedHexInspector() {
     }
   }
 
+  const riverEditor = document.getElementById("river-ports-editor");
+  if (riverEditor) {
+    if (hex.river) {
+      const [r, c] = key.split(",").map(Number);
+      if (!Array.isArray(hex.riverPorts) || hex.riverPorts.length === 0) {
+        autoInferHexRiverPorts(r, c, false);
+      }
+      riverEditor.style.display = "block";
+      const sidePills = HEX_SIDE_LABELS.map((lbl, idx) => {
+        const pid = `S${idx}`;
+        const active = hex.riverPorts.includes(pid);
+        return `<button type="button" class="btn btn-sm" style="min-height:25px;padding:0.1rem 0.38rem;font-size:0.72rem;${active ? 'background:#52525b;color:#fff;border-color:#52525b;' : ''}" onclick="toggleSelectedRiverPort('${pid}')" title="Enter/Leave via ${lbl} Hex Side">${lbl}</button>`;
+      }).join("");
+      const cornerPills = HEX_CORNER_LABELS.map((lbl, idx) => {
+        const pid = `C${idx}`;
+        const active = hex.riverPorts.includes(pid);
+        return `<button type="button" class="btn btn-sm" style="min-height:25px;padding:0.1rem 0.38rem;font-size:0.72rem;${active ? 'background:#71717a;color:#fff;border-color:#71717a;' : ''}" onclick="toggleSelectedRiverPort('${pid}')" title="Enter/Leave via ${lbl} Hex Corner">${lbl}</button>`;
+      }).join("");
+      riverEditor.innerHTML = `
+        <div style="display:flex;align-items:center;gap:0.25rem;flex-wrap:wrap;margin-bottom:0.35rem;">
+          <strong style="min-width:92px;color:var(--text-secondary);">Hex Sides:</strong>
+          ${sidePills}
+        </div>
+        <div style="display:flex;align-items:center;gap:0.25rem;flex-wrap:wrap;margin-bottom:0.4rem;">
+          <strong style="min-width:92px;color:var(--text-secondary);">Hex Corners:</strong>
+          ${cornerPills}
+        </div>
+        <div style="display:flex;align-items:center;gap:0.35rem;flex-wrap:wrap;padding-top:0.25rem;border-top:1px solid var(--border);">
+          <button type="button" class="btn btn-sm" style="min-height:25px;padding:0.1rem 0.45rem;font-size:0.72rem;" onclick="addRiverBranchFromSelected()" title="Sprout a tributary river branch from this hex into an adjacent hex">🌿 Add Branch</button>
+          <button type="button" class="btn btn-sm" style="min-height:25px;padding:0.1rem 0.45rem;font-size:0.72rem;" onclick="autoSnapSelectedHexRiver()" title="Snap river sides to adjacent river/lake hexes">🔗 Auto-Snap</button>
+          <button type="button" class="btn btn-sm" style="min-height:25px;padding:0.1rem 0.45rem;font-size:0.72rem;" onclick="rerollRealmRivers()" title="Generate a new branching river network across the map">🌊 Reroll Rivers</button>
+        </div>
+      `;
+    } else {
+      riverEditor.style.display = "none";
+      riverEditor.innerHTML = "";
+    }
+  }
+
   const { activeMyth, dist } = findNearestActiveMyth(key);
   const mythObj = activeMyth ? getMythById(activeMyth.mythId) : null;
   const folkloreEl = document.getElementById("selected-hex-folklore");
@@ -1752,6 +2108,140 @@ function renderSelectedHexInspector() {
   } else {
     folkloreEl.innerHTML = "";
   }
+}
+
+function toggleSelectedHexRiver() {
+  const key = state.selectedHex;
+  if (!state.hexes[key]) state.hexes[key] = {};
+  const hex = state.hexes[key];
+  const [r, c] = key.split(",").map(Number);
+  const checked = document.getElementById("hex-river-edit").checked;
+  hex.river = checked;
+
+  if (checked) {
+    hex.riverPorts = [];
+    autoInferHexRiverPorts(r, c, true);
+  } else {
+    hex.riverPorts = [];
+    // Remove shared side stubs on neighboring river hexes
+    for (let s = 0; s < 6; s++) {
+      const nb = getHexNeighborInDir(r, c, s);
+      if (nb && state.hexes[nb.key] && state.hexes[nb.key].river) {
+        removeRiverPort(state.hexes[nb.key], `S${nb.oppSide}`);
+      }
+    }
+  }
+  renderRealmMap();
+  renderSelectedHexInspector();
+  saveState();
+}
+
+function toggleSelectedRiverPort(portId) {
+  const key = state.selectedHex;
+  const hex = state.hexes[key];
+  if (!hex) return;
+  const [r, c] = key.split(",").map(Number);
+  if (!Array.isArray(hex.riverPorts)) hex.riverPorts = [];
+
+  const isRemoving = hex.riverPorts.includes(portId);
+  if (isRemoving) {
+    hex.riverPorts = hex.riverPorts.filter(p => p !== portId);
+    if (portId.startsWith("S")) {
+      const sIdx = Number(portId.slice(1));
+      const nb = getHexNeighborInDir(r, c, sIdx);
+      if (nb && state.hexes[nb.key] && state.hexes[nb.key].river) {
+        removeRiverPort(state.hexes[nb.key], `S${nb.oppSide}`);
+      }
+    }
+    if (hex.riverPorts.length === 0) {
+      hex.river = false;
+    }
+  } else {
+    hex.river = true;
+    hex.riverPorts.push(portId);
+    if (portId.startsWith("S")) {
+      const sIdx = Number(portId.slice(1));
+      const nb = getHexNeighborInDir(r, c, sIdx);
+      if (nb && state.hexes[nb.key] && state.hexes[nb.key].river) {
+        addRiverPort(state.hexes[nb.key], `S${nb.oppSide}`);
+      }
+    }
+  }
+  renderRealmMap();
+  renderSelectedHexInspector();
+  saveState();
+}
+
+function autoSnapSelectedHexRiver() {
+  const key = state.selectedHex;
+  const [r, c] = key.split(",").map(Number);
+  const hex = state.hexes[key];
+  if (!hex) return;
+  hex.river = true;
+  autoInferHexRiverPorts(r, c, true);
+  renderRealmMap();
+  renderSelectedHexInspector();
+  saveState();
+  setBanner(`Snapped river connections at ${formatHexCoord(key)}`);
+}
+
+function addRiverBranchFromSelected() {
+  const key = state.selectedHex;
+  const [r, c] = key.split(",").map(Number);
+  const hex = state.hexes[key];
+  if (!hex) return;
+  hex.river = true;
+  if (!Array.isArray(hex.riverPorts) || hex.riverPorts.length === 0) {
+    autoInferHexRiverPorts(r, c, true);
+  }
+
+  // Find a side direction where the neighbor is not yet a river hex
+  const candidateDirs = [1, 5, 2, 4, 0, 3].filter(s => !hex.riverPorts.includes(`S${s}`));
+  let chosenDir = -1;
+  let chosenNb = null;
+  for (const s of candidateDirs) {
+    const nb = getHexNeighborInDir(r, c, s);
+    if (nb && state.hexes[nb.key] && !state.hexes[nb.key].river && state.hexes[nb.key].terrain !== "Lake") {
+      chosenDir = s;
+      chosenNb = nb;
+      break;
+    }
+  }
+  if (chosenDir === -1) {
+    // Fallback: add an unused Corner branch on this hex
+    const unusedCorner = ["C1", "C0", "C2", "C5", "C3", "C4"].find(cid => !hex.riverPorts.includes(cid));
+    if (unusedCorner) {
+      addRiverPort(hex, unusedCorner);
+      renderRealmMap();
+      renderSelectedHexInspector();
+      saveState();
+      setBanner(`Added corner river branch (${unusedCorner}) at ${formatHexCoord(key)}`);
+    }
+    return;
+  }
+
+  addRiverPort(hex, `S${chosenDir}`);
+  const nbHex = state.hexes[chosenNb.key];
+  nbHex.river = true;
+  nbHex.barrier = false;
+  nbHex.barrierSides = [];
+  nbHex.riverPorts = [`S${chosenNb.oppSide}`];
+  // Also give the new branch hex an outward corner or side so it looks like a flowing tributary creek
+  const outwardCorner = chosenDir <= 2 ? "C1" : "C0";
+  addRiverPort(nbHex, outwardCorner);
+
+  renderRealmMap();
+  renderSelectedHexInspector();
+  saveState();
+  setBanner(`Sprouted river branch into ${formatHexCoord(chosenNb.key)}`);
+}
+
+function rerollRealmRivers() {
+  generateBranchingRiverNetwork();
+  renderRealmMap();
+  renderSelectedHexInspector();
+  saveState();
+  setBanner("Generated new branching river network");
 }
 
 function toggleSelectedHexBarrier() {
@@ -2519,8 +3009,10 @@ window.addEventListener("DOMContentLoaded", () => {
   if (!state.pageBg) state.pageBg = "nobg";
   if (!hadSaved || !Object.keys(state.hexes).length) {
     state.barrierCurveMigrated = true;
+    state.riverGraphMigrated = true;
     generateStarterRealm();
   } else {
+    let migrated = false;
     if (!state.barrierCurveMigrated) {
       Object.values(state.hexes).forEach(hex => {
         if (hex && hex.barrier) {
@@ -2528,8 +3020,14 @@ window.addEventListener("DOMContentLoaded", () => {
         }
       });
       state.barrierCurveMigrated = true;
-      saveState();
+      migrated = true;
     }
+    if (!state.riverGraphMigrated) {
+      generateBranchingRiverNetwork();
+      state.riverGraphMigrated = true;
+      migrated = true;
+    }
+    if (migrated) saveState();
     renderRealmMap();
     renderSelectedHexInspector();
     renderActiveMyths();
